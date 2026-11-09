@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Heart, Languages, Loader2, Mail, Lock } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { setLocale } from '@/i18n';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { Alert, Button, Input } from '@/components/ui';
 
 export default function Login() {
@@ -97,6 +98,20 @@ export default function Login() {
           </div>
 
           <form onSubmit={submit} className="space-y-4">
+            {!isSupabaseConfigured && (
+              <Alert tone="warning">
+                <div className="space-y-2">
+                  <p>{t('auth.notConfigured')}</p>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/setup')}
+                    className="font-semibold text-brand-700 underline"
+                  >
+                    {t('auth.openSetup')}
+                  </button>
+                </div>
+              </Alert>
+            )}
             {error && <Alert tone="danger">{error}</Alert>}
             {info && <Alert tone="success">{info}</Alert>}
 

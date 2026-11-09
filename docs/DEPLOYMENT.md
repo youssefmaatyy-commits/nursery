@@ -25,6 +25,12 @@ The repo already contains `vercel.json`:
    | `VITE_SUPABASE_URL` | `https://<project-ref>.supabase.co` |
    | `VITE_SUPABASE_ANON_KEY` | publishable/anon key |
 
+   > **If you cannot add repository secrets:** the app supports runtime
+   > configuration. Build and deploy without them, then open `/setup` once and
+   > enter the project URL + publishable key. They are stored in that browser's
+   > localStorage only (a `service_role` key is rejected). This is a stop-gap for
+   > evaluation, not the recommended production path — build-time env vars are.
+
 5. Deploy. Note the assigned domains, e.g.
    `https://nursery.vercel.app` and `https://nursery-git-develop-<team>.vercel.app`.
 6. Add every real origin to **Supabase → Authentication → URL Configuration**

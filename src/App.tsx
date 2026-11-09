@@ -31,6 +31,7 @@ const Notifications = lazy(() => import('@/pages/Notifications'));
 const Sync = lazy(() => import('@/pages/Sync'));
 const ParentPortal = lazy(() => import('@/pages/ParentPortal'));
 const ResetPassword = lazy(() => import('@/pages/ResetPassword'));
+const Setup = lazy(() => import('@/pages/Setup'));
 
 function Loading() {
   return <Card><TableSkeleton rows={6} cols={4} /></Card>;
@@ -57,6 +58,7 @@ export default function App() {
   return (
     <Suspense fallback={<Loading />}>
       <Routes>
+        <Route path="/setup" element={<Setup />} />
         <Route path="/login" element={<Login />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route

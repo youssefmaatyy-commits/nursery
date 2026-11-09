@@ -23,7 +23,7 @@ export default function ResetPassword() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (password.length < 8) { setError(t('auth.passwordTooShort')); return; }
+    if (password.length < 12) { setError(t('auth.passwordTooShort')); return; }
     if (password !== confirm) { setError(t('common.error')); return; }
     setBusy(true);
     try {

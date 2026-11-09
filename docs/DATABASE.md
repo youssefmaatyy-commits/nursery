@@ -194,6 +194,7 @@ on 30 protected tables and cannot execute 5 protected RPCs.
 | 0010 | dashboard | reporting RPCs |
 | 0011 | timezone_and_hardening | Africa/Cairo, indexes, extra guards |
 | 0012 | scheduled_jobs | pg_cron: daily expiry sweep, audit retention, `scheduled_jobs` view |
+| 0013 | absence_reminder_cron | pg_net trigger + `erp-absence-reminder` job; secret read from Vault |
 
 Migration files are append-only. To change the schema, add `0013_*.sql`.
 
@@ -205,12 +206,18 @@ Migration files are append-only. To change the schema, add `0013_*.sql`.
 | --- | --- | --- | --- |
 | `erp-daily-expiry-sweep` | `0 4 * * *` | 06:00 | `run_expiry_jobs()` — expires subscriptions past `end_date`, creates expiry-soon and low-stock notifications |
 | `erp-audit-retention` | `15 2 * * *` | 04:15 | `prune_old_audit_logs(24)` — deletes audit rows older than 24 months |
+| `erp-absence-reminder` | `0 10 * * *` | 12:00 | `trigger_absence_reminder()` — POSTs to the `absence-reminder` Edge Function via pg_net |
 
 Check job health:
 
 ```sql
 select jobname, schedule, active, last_run_at, last_status from public.scheduled_jobs;
 ```
+
+`trigger_absence_reminder()` reads the shared secret from **Supabase Vault**
+(`absence_reminder_cron_secret`) instead of hardcoding it, and returns
+`{"skipped":true,"reason":"vault_secret_missing"}` when it has not been created
+yet — so the schedule is safe to install before the messaging provider exists.
 
 Both functions are idempotent and safe to re-run manually. `run_expiry_jobs()`
 was exercised against the live project: a subscription 5 days from expiry

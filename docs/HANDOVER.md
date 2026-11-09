@@ -22,7 +22,7 @@
 | Lint | ✅ 0 errors, 0 warnings | `npm run lint` |
 | Docs | ✅ 8 guides | `docs/*.md` |
 | Scheduled jobs | ✅ 2 cron jobs active | `cron.job`: expiry sweep, audit retention |
-| Edge Function | ⚠️ deployed, runtime broken | slug `absence-reminder` v5, `verify_jwt: false`; **every** function returns `BOOT_ERROR` (see limitations) |
+| Edge Function | ✅ deployed **and booting** | slug `absence-reminder`; unauthenticated call → `401 {"error":"unauthorized"}` |
 | Deployment config | ✅ | `vercel.json`, `.github/workflows/ci.yml` |
 | Reproducible install | ✅ | `npm ci --legacy-peer-deps` → 623 packages from committed lockfile |
 
@@ -68,6 +68,7 @@ Live object counts: **49 tables · 114 RLS policies · 94 functions · 41 permis
 10. `0010_dashboard` — dashboard + 7 reporting RPCs
 11. `0011_timezone_and_hardening` — `Africa/Cairo`, indexes, extra guards
 12. `0012_scheduled_jobs` — pg_cron expiry sweep + audit retention + `scheduled_jobs` view
+13. `0013_absence_reminder_cron` — pg_net trigger for the absence-reminder function
 
 ### Scheduled jobs (live)
 
@@ -75,21 +76,26 @@ Live object counts: **49 tables · 114 RLS policies · 94 functions · 41 permis
 | --- | --- | --- | --- |
 | `erp-daily-expiry-sweep` | `0 4 * * *` | 06:00 | expires subscriptions, sends expiry/low-stock notifications |
 | `erp-audit-retention` | `15 2 * * *` | 04:15 | prunes audit rows older than 24 months |
+| `erp-absence-reminder` | `0 10 * * *` | 12:00 | POSTs to the `absence-reminder` function (skips until the Vault secret exists) |
 
-### Edge Functions (deployed, not running)
+### Edge Functions (live)
 
 | Slug | Purpose | Auth | Runtime |
 | --- | --- | --- | --- |
-| `absence-reminder` | WhatsApp/SMS for today's absences | `x-cron-secret` header or staff JWT with `settings.manage` | ❌ `BOOT_ERROR` |
+| `absence-reminder` | WhatsApp/SMS for today's absences | `x-cron-secret` header or staff JWT with `settings.manage` | ✅ booting, returns 401 when unauthenticated |
 
-**The Edge Functions runtime on this project does not boot any function.** Proven
-by deploying a 3-line healthcheck to a brand-new slug — it returned the same
-`{"code":"BOOT_ERROR"}`. Auth, REST, Storage, Realtime and the database all report
-`ACTIVE_HEALTHY`, so this is isolated to the functions service. The code is
-committed and ready; redeploy with
-`supabase functions deploy absence-reminder --project-ref <ref>` once Supabase
-resolves it. No provider credentials are configured, so no message has ever been
-sent regardless.
+The function initially returned `BOOT_ERROR` for every function on the project
+(including a 3-line healthcheck on a fresh slug). That was a transient
+platform-side fault which cleared on its own: the runtime now boots and
+correctly rejects anonymous callers. No WhatsApp/Twilio credentials are configured yet, so no message has
+been delivered — see the activation steps below.
+
+**To activate messaging:**
+1. `supabase secrets set CRON_SECRET=<random> WHATSAPP_TOKEN=… WHATSAPP_PHONE_ID=…` (or the Twilio trio).
+2. `select vault.create_secret('<same random value>', 'absence_reminder_cron_secret');`
+   — `0013_absence_reminder_cron.sql` reads it from Vault, so no credential is in
+   the repo, and the daily 10:00 UTC (12:00 Cairo) job starts firing instead of
+   skipping with `vault_secret_missing`.
 
 ### Auth configuration (hardened this session)
 
@@ -200,11 +206,9 @@ server-only block).
    the app will then show a configuration error instead of data.
 6. **Seed data is demo data** (prices, children, invoices); the account
    passwords have been rotated. Replace the seeded prices/services with real ones.
-7. **Edge Functions do not boot.** `absence-reminder` is deployed (v5) but the
-   runtime returns `BOOT_ERROR` for every function on the project, including a
-   minimal healthcheck on a fresh slug. This is a Supabase-side failure, not a
-   code defect — retry deployment later. In-app notifications work fine
-   (`run_expiry_jobs` is verified), so nothing depends on the function today.
+7. **No messaging provider configured.** `absence-reminder` boots and rejects
+   anonymous calls, but without WhatsApp/Twilio secrets and the Vault secret it
+   sends nothing (the cron job exits with `vault_secret_missing`).
 8. **Password minimum length is 6** (Supabase default); the dashboard should be
    set to 12 — the connector does not expose that field.
 9. **Backups**: automatic daily backups require a paid Supabase plan; on free
