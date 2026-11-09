@@ -26,15 +26,13 @@ function computeCharge(rule: Rule, minutes: number): { amount: number; billable:
     return { amount: Math.max(rule.base_price ?? 0, minCharge), billable: Math.max(0, minutes) };
   }
   const billable = Math.max(0, minutes - grace);
-  let base = 0;
-  let extra = 0;
-  if (included > 0) {
-    const extraMinutes = Math.max(0, billable - included);
-    base = rule.base_price ?? 0;
-    extra = Math.ceil(extraMinutes / Math.max(1, rule.unit_minutes)) * rule.price;
-  } else {
-    extra = Math.ceil(billable / Math.max(1, rule.unit_minutes)) * rule.price;
-  }
+  const unit = Math.max(1, rule.unit_minutes);
+  const { base, extra } = included > 0
+    ? {
+        base: rule.base_price ?? 0,
+        extra: Math.ceil(Math.max(0, billable - included) / unit) * rule.price,
+      }
+    : { base: 0, extra: Math.ceil(billable / unit) * rule.price };
   return { amount: Math.round(Math.max(minCharge, base + extra) * 100) / 100, billable };
 }
 

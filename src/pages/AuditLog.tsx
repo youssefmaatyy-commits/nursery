@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ScrollText } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { Badge, Card, EmptyState, Input, PageHeader, Select, TableSkeleton } from '@/components/ui';
+import { Badge, EmptyState, Input, PageHeader, Select, TableSkeleton } from '@/components/ui';
 import { formatDateTime } from '@/lib/utils';
 
 export default function AuditLog() {

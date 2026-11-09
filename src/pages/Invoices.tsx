@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/Toast';
 import {
-  Badge, Button, Card, EmptyState, Input, Modal, PageHeader, Select, TableSkeleton,
+  Badge, Button, EmptyState, Input, Modal, PageHeader, Select, TableSkeleton,
 } from '@/components/ui';
 import { downloadCsv, formatCurrency, formatDateTime, newIdempotencyKey, printElement } from '@/lib/utils';
 

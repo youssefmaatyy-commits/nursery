@@ -5,7 +5,7 @@ import { CalendarCheck, Plus, RefreshCw, Ban, PlayCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/Toast';
-import { Badge, Button, Card, CardHeader, EmptyState, Input, Modal, PageHeader, Select, TableSkeleton } from '@/components/ui';
+import { Badge, Button, EmptyState, Input, Modal, PageHeader, Select, TableSkeleton } from '@/components/ui';
 import { formatCurrency, formatDate } from '@/lib/utils';
 
 interface Sub {

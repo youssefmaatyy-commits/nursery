@@ -37,10 +37,13 @@ export default function Settings() {
 
   const [branchDraft, setBranchDraft] = useState<Record<string, string>>({});
 
+  const parseValue = (raw: string): unknown => {
+    try { return JSON.parse(raw); } catch { return raw; }
+  };
+
   const saveSetting = useMutation({
     mutationFn: async ({ key, value }: { key: string; value: string }) => {
-      let parsed: unknown = value;
-      try { parsed = JSON.parse(value); } catch { parsed = value; }
+      const parsed: unknown = parseValue(value);
       const { error } = await supabase.from('system_settings')
         .update({ value: parsed, updated_by: context?.user_id ?? null, updated_at: new Date().toISOString() })
         .eq('key', key);

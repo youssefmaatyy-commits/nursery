@@ -13,7 +13,7 @@ server-side money math, offline-first PWA, and a separate secure parent portal.
 ┌───────────────────────────────▼──────────────────────────────────────┐
 │ Supabase                                                             │
 │  • Auth (email/password, password reset, session refresh)            │
-│  • PostgreSQL 17: 49 tables, 114 RLS policies, 90+ functions/views   │
+│  • PostgreSQL 17: 49 tables, 114 RLS policies, 94 functions          │
 │  • Storage: 5 private buckets (signed / policy-gated access)         │
 │  • SECURITY DEFINER RPCs for every money & attendance mutation       │
 └──────────────────────────────────────────────────────────────────────┘
@@ -44,10 +44,21 @@ server-side money math, offline-first PWA, and a separate secure parent portal.
 ## Quick start
 
 ```bash
-npm install
+git clone https://github.com/youssefmaatyy-commits/nursery.git
+cd nursery
+npm install --legacy-peer-deps
 cp .env.example .env      # fill VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
 npm run dev               # http://localhost:5173
 ```
+
+`--legacy-peer-deps` is required: `vite-plugin-pwa` declares a peer range that
+predates Vite 6.
+
+The database schema ships as eleven migrations in `supabase/migrations/`. Apply
+them with `supabase db push` (or run the files in order in the SQL editor) — see
+[docs/INSTALLATION.md](docs/INSTALLATION.md). Sign-ups are disabled by design;
+create staff accounts with `npm run bootstrap:admin` or from the Supabase
+dashboard.
 
 ## Scripts
 
@@ -59,6 +70,11 @@ npm run dev               # http://localhost:5173
 | `npm run lint` | ESLint |
 | `npm test` | Vitest unit suite (pricing, invoice math, subscriptions, i18n parity, RBAC, formatting) |
 | `npm run test:rls` | Anonymous-access probe against a live project (needs `SUPABASE_URL`, `SUPABASE_ANON_KEY`) |
+| `npm run preview` | Serve the production build on port 4173 |
+| `npm run bootstrap:admin` | Create/rotate the first administrator (service-role key, server-side only) |
+
+Current status: `typecheck` 0 errors · `lint` 0 errors / 0 warnings · **38 tests
+passing** across 7 files · production build verified with the PWA service worker.
 
 ## Documentation
 
@@ -70,6 +86,17 @@ npm run dev               # http://localhost:5173
 - [docs/TESTING.md](docs/TESTING.md) — test inventory and results
 - [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) — first-run admin checklist
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `main`, `develop` and feature
+branches: install → typecheck → lint → tests → production build → artefact check
+(`dist/index.html`, `dist/sw.js`). On `main` it additionally runs the RLS probe
+against the live project. Required secrets: `VITE_SUPABASE_URL`,
+`VITE_SUPABASE_ANON_KEY`.
+
+`vercel.json` pins the build, SPA rewrite, immutable asset caching, `no-store`
+for the service worker, and hardened response headers.
+
 ## Security posture
 
 - No service-role key anywhere in the frontend; the browser only ever holds the publishable key.
@@ -79,6 +106,17 @@ npm run dev               # http://localhost:5173
 - `payments` / `invoices` / `refunds` rows cannot be updated destructively or deleted (`prevent_financial_mutation`).
 - Child documents live in private buckets; access is granted through storage policies tied to staff permission or
   a parent's own children.
+- Sign-ups are disabled; the auth redirect allow-list is restricted to known origins; refresh-token rotation is on.
+- `.env`, service-role keys and database passwords are git-ignored and never bundled — the build only ever sees
+  `VITE_*` values.
+
+## Data model at a glance
+
+49 tables in seven groups: core & tenancy (11), children & guardians (7),
+operations (11), financial (9), inventory & procurement (6), subscriptions (3),
+HR (2) + sync (1). Types for every table the UI touches live in
+`src/types/db.ts`; the full description with columns, functions and RLS shape is
+in [docs/DATABASE.md](docs/DATABASE.md).
 
 ## License
 
