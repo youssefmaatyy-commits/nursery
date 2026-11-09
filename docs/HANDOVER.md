@@ -24,22 +24,28 @@
 | Scheduled jobs | ✅ 2 cron jobs active | `cron.job`: expiry sweep, audit retention |
 | Edge Function | ✅ deployed **and booting** | slug `absence-reminder`; unauthenticated call → `401 {"error":"unauthorized"}` |
 | Deployment config | ✅ | `vercel.json`, `.github/workflows/ci.yml` |
+| Vercel production deploy | ✅ built & READY | `dpl_2CvwX84peuFwbr4QX4gXQveS6Pxs`, env vars baked in |
 | Reproducible install | ✅ | `npm ci --legacy-peer-deps` → 623 packages from committed lockfile |
 
 ### URLs
 
 - **Repository:** https://github.com/youssefmaatyy-commits/nursery
 - **Pull request (open):** https://github.com/youssefmaatyy-commits/nursery/pull/1
-- **Vercel preview:** `https://nursery-git-arena-3fdc8dda-nursery-youssef-maaty.vercel.app`
-  — build *passing*, deployment *Ready*, but the project has **Vercel
-  Authentication (Deployment Protection) enabled**, so an anonymous visitor is
-  redirected to a Vercel login. This is a Vercel project setting with no API
-  exposed to this session; disable it in **Vercel → Project → Settings →
-  Deployment Protection → Vercel Authentication: Disabled**.
-- **Workaround that is already built:** once protection is off, the app is
-  usable even without build-time secrets — open `/setup` and enter the project
-  URL + publishable key once per browser (see `src/pages/Setup.tsx`).
-- There is **no production domain yet** — no merge to `main` has happened.
+- **Vercel production deployment:** `https://nursery-youssef-maaty.vercel.app`
+  (deployment `dpl_2CvwX84peuFwbr4QX4gXQveS6Pxs`, state **READY**, target
+  **production**, alias assigned). Built from `f44c12b` with
+  `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` present, so the bundle is wired
+  to the database — no `/setup` step is needed.
+- **Preview:** `https://nursery-git-arena-3fdc8dda-nursery-youssef-maaty.vercel.app`
+- ⚠️ **Both URLs currently answer with a Vercel login page.** The project has
+  `ssoProtection.deploymentType = "all_except_custom_domains"`. Verified by
+  creating a throwaway project: a **new** project on this team is created with
+  the identical setting, so it is a team-level deployment-protection default, not
+  a per-project mistake. The connector's `update_project` schema has no
+  protection field, and the team has no custom domain (which would be exempt).
+  The only fix is a UI/API action: **Vercel → Team Settings → Deployment
+  Protection → Vercel Authentication: Disabled**, or add a custom domain to the
+  project.
 - **Local dev server:** running in this workspace on port **5173/5174**
   (`https://<port>-<sandboxId>.e2b.app`), `GET /` → 200, Arabic RTL shell.
 
