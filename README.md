@@ -85,6 +85,7 @@ passing** across 7 files · production build verified with the PWA service worke
 - [docs/BACKUP_RESTORE.md](docs/BACKUP_RESTORE.md) — backup, verification and restore drills
 - [docs/TESTING.md](docs/TESTING.md) — test inventory and results
 - [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) — first-run admin checklist
+- [docs/HANDOVER.md](docs/HANDOVER.md) — verified resource list, test report, known limitations, next steps
 
 ## Continuous integration
 
