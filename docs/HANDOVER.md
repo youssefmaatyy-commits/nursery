@@ -20,7 +20,9 @@
 | Tests | ✅ 38 / 38 | `npm test` → 7 files, 38 passed |
 | Typecheck | ✅ 0 errors | `npm run typecheck` |
 | Lint | ✅ 0 errors, 0 warnings | `npm run lint` |
-| Docs | ✅ 7 guides | `docs/*.md` |
+| Docs | ✅ 8 guides | `docs/*.md` |
+| Scheduled jobs | ✅ 2 cron jobs active | `cron.job`: expiry sweep, audit retention |
+| Edge Function | ⚠️ deployed, runtime broken | slug `absence-reminder` v5, `verify_jwt: false`; **every** function returns `BOOT_ERROR` (see limitations) |
 | Deployment config | ✅ | `vercel.json`, `.github/workflows/ci.yml` |
 | Reproducible install | ✅ | `npm ci --legacy-peer-deps` → 623 packages from committed lockfile |
 
@@ -65,6 +67,29 @@ Live object counts: **49 tables · 114 RLS policies · 94 functions · 41 permis
 9. `0009_subscriptions` — packages, subscriptions, usage, lifecycle RPCs
 10. `0010_dashboard` — dashboard + 7 reporting RPCs
 11. `0011_timezone_and_hardening` — `Africa/Cairo`, indexes, extra guards
+12. `0012_scheduled_jobs` — pg_cron expiry sweep + audit retention + `scheduled_jobs` view
+
+### Scheduled jobs (live)
+
+| Job | UTC | Cairo | Action |
+| --- | --- | --- | --- |
+| `erp-daily-expiry-sweep` | `0 4 * * *` | 06:00 | expires subscriptions, sends expiry/low-stock notifications |
+| `erp-audit-retention` | `15 2 * * *` | 04:15 | prunes audit rows older than 24 months |
+
+### Edge Functions (deployed, not running)
+
+| Slug | Purpose | Auth | Runtime |
+| --- | --- | --- | --- |
+| `absence-reminder` | WhatsApp/SMS for today's absences | `x-cron-secret` header or staff JWT with `settings.manage` | ❌ `BOOT_ERROR` |
+
+**The Edge Functions runtime on this project does not boot any function.** Proven
+by deploying a 3-line healthcheck to a brand-new slug — it returned the same
+`{"code":"BOOT_ERROR"}`. Auth, REST, Storage, Realtime and the database all report
+`ACTIVE_HEALTHY`, so this is isolated to the functions service. The code is
+committed and ready; redeploy with
+`supabase functions deploy absence-reminder --project-ref <ref>` once Supabase
+resolves it. No provider credentials are configured, so no message has ever been
+sent regardless.
 
 ### Auth configuration (hardened this session)
 
@@ -75,12 +100,21 @@ Live object counts: **49 tables · 114 RLS policies · 94 functions · 41 permis
   → **replace the localhost/wildcard entries with real domains before production**
 - Refresh-token rotation on
 
-### Test accounts (must be rotated before production)
+### Test accounts — passwords rotated 9 Nov 2026
 
-| Role | Email | Password |
-| --- | --- | --- |
-| Super Admin | `admin@kidsnursery.local` | `ChangeMe!Admin2026` |
-| Parent | `parent.test@example.com` | `ParentTest!2026` |
+The original demo passwords (`ChangeMe!Admin2026`, `ParentTest!2026`) **no longer
+work**; they were replaced with strong random values stored in the operator's
+password manager (verified: `crypt()` check passes for the new value and fails
+for the old one). Neither new password is written in this repository.
+
+| Role | Email |
+| --- | --- |
+| Super Admin | `admin@kidsnursery.local` |
+| Parent | `parent.test@example.com` |
+
+Both accounts still use a `.local` domain, so password-reset email cannot reach
+them — create a real-billing administrator with `npm run bootstrap:admin` before
+go-live.
 
 Sample data present: branch `MAIN`, children `CH-01001` (Omar Ahmed) and Layla
 Kamal, parent `P-01001`, invoices `INV-001001` + one POS invoice, supplier
@@ -164,10 +198,13 @@ server-only block).
 5. **The live CI build has no Supabase secrets configured yet**, so the deployed
    bundle has empty `VITE_*` values until you add the two repository secrets —
    the app will then show a configuration error instead of data.
-6. **Test accounts and seed data are demo values**; rotate the passwords and
-   replace the seeded prices/services with real ones.
-7. **SMS/WhatsApp notifications are not wired** — in-app notifications only;
-   Edge Functions are the intended integration point (none deployed).
+6. **Seed data is demo data** (prices, children, invoices); the account
+   passwords have been rotated. Replace the seeded prices/services with real ones.
+7. **Edge Functions do not boot.** `absence-reminder` is deployed (v5) but the
+   runtime returns `BOOT_ERROR` for every function on the project, including a
+   minimal healthcheck on a fresh slug. This is a Supabase-side failure, not a
+   code defect — retry deployment later. In-app notifications work fine
+   (`run_expiry_jobs` is verified), so nothing depends on the function today.
 8. **Password minimum length is 6** (Supabase default); the dashboard should be
    set to 12 — the connector does not expose that field.
 9. **Backups**: automatic daily backups require a paid Supabase plan; on free

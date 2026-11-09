@@ -193,5 +193,26 @@ on 30 protected tables and cannot execute 5 protected RPCs.
 | 0009 | subscriptions | packages/subscriptions/usage + lifecycle RPCs |
 | 0010 | dashboard | reporting RPCs |
 | 0011 | timezone_and_hardening | Africa/Cairo, indexes, extra guards |
+| 0012 | scheduled_jobs | pg_cron: daily expiry sweep, audit retention, `scheduled_jobs` view |
 
-Migration files are append-only. To change the schema, add `0012_*.sql`.
+Migration files are append-only. To change the schema, add `0013_*.sql`.
+
+## Scheduled jobs
+
+`0012_scheduled_jobs.sql` registers two pg_cron jobs (both verified running):
+
+| Job | Schedule (UTC) | Cairo time | Action |
+| --- | --- | --- | --- |
+| `erp-daily-expiry-sweep` | `0 4 * * *` | 06:00 | `run_expiry_jobs()` — expires subscriptions past `end_date`, creates expiry-soon and low-stock notifications |
+| `erp-audit-retention` | `15 2 * * *` | 04:15 | `prune_old_audit_logs(24)` — deletes audit rows older than 24 months |
+
+Check job health:
+
+```sql
+select jobname, schedule, active, last_run_at, last_status from public.scheduled_jobs;
+```
+
+Both functions are idempotent and safe to re-run manually. `run_expiry_jobs()`
+was exercised against the live project: a subscription 5 days from expiry
+produced 1 notification, and one moved to yesterday's date was flipped to
+`expired` (`expired: 1`).

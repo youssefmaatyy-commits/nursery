@@ -49,6 +49,8 @@ on the deployed project:
 | 16 | Kids session inside a subscription (45 min) | billed 0, `minutes_used` 45 | ✅ |
 | 17 | `mark_absence` for a date outside enrollment | rejected | ✅ |
 | 18 | `dashboard_metrics('MAIN')` | non-zero revenue, children present, open sessions listed | ✅ |
+| 19 | `run_expiry_jobs()` with a subscription expiring in 5 days | `notified: 1`, one `subscription_expiring` notification | ✅ |
+| 20 | `run_expiry_jobs()` with `end_date = current_date - 1` | `expired: 1`, status becomes `expired` | ✅ |
 
 ## 3. RLS probe — `npm run test:rls`
 
@@ -102,6 +104,13 @@ Be explicit about the gaps so the next team does not assume coverage:
 - **No browser E2E** (Playwright/Cypress) — the sandbox has no browser binary and
   the network policy blocks the download. `tests/render.test.tsx` covers the
   critical render path in jsdom instead.
+- **Scheduled jobs** are verified by invoking the functions directly; the cron
+  firing itself is only observable after the first scheduled run (check
+  `public.scheduled_jobs`).
+- **Edge Function `absence-reminder`** cannot be tested at all: the project's
+  functions runtime returns `BOOT_ERROR` even for a 3-line healthcheck on a new
+  slug. The auth logic (401 for unauthenticated callers) is therefore unverified
+  at runtime, only reviewed in code. No provider credentials exist either.
 - **No load testing** — concurrent check-in contention is protected by a partial
   unique index, but throughput has not been measured.
 - **No visual regression** testing.
