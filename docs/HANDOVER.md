@@ -31,11 +31,15 @@
 - **Repository:** https://github.com/youssefmaatyy-commits/nursery
 - **Pull request (open):** https://github.com/youssefmaatyy-commits/nursery/pull/1
 - **Vercel preview:** `https://nursery-git-arena-3fdc8dda-nursery-youssef-maaty.vercel.app`
-  — the build **succeeded** and the deployment is *Ready*, but the project has
-  **Vercel Authentication (deployment protection) enabled**, so an anonymous
-  visitor is redirected to a Vercel login. Disable it in
-  **Vercel → Project → Settings → Deployment Protection** to make the URL public.
-  There is **no production domain yet** — no merge to `main` has happened.
+  — build *passing*, deployment *Ready*, but the project has **Vercel
+  Authentication (Deployment Protection) enabled**, so an anonymous visitor is
+  redirected to a Vercel login. This is a Vercel project setting with no API
+  exposed to this session; disable it in **Vercel → Project → Settings →
+  Deployment Protection → Vercel Authentication: Disabled**.
+- **Workaround that is already built:** once protection is off, the app is
+  usable even without build-time secrets — open `/setup` and enter the project
+  URL + publishable key once per browser (see `src/pages/Setup.tsx`).
+- There is **no production domain yet** — no merge to `main` has happened.
 - **Local dev server:** running in this workspace on port **5173/5174**
   (`https://<port>-<sandboxId>.e2b.app`), `GET /` → 200, Arabic RTL shell.
 
@@ -209,8 +213,10 @@ server-only block).
 7. **No messaging provider configured.** `absence-reminder` boots and rejects
    anonymous calls, but without WhatsApp/Twilio secrets and the Vault secret it
    sends nothing (the cron job exits with `vault_secret_missing`).
-8. **Password minimum length is 6** (Supabase default); the dashboard should be
-   set to 12 — the connector does not expose that field.
+8. **Password minimum length is 6** (Supabase default). The connector's schema
+   has no such field (confirmed at the input-schema level), so this can only be
+   changed in **Supabase → Authentication → Providers → Email → Minimum password
+   length**. The client-side reset form now enforces 12 regardless.
 9. **Backups**: automatic daily backups require a paid Supabase plan; on free
    tier use the manual procedure in `docs/BACKUP_RESTORE.md`.
 
