@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Baby, Plus, Search, QrCode, Phone, UserPlus, Archive } from 'lucide-react';
+import { Baby, Plus, Search, QrCode, Phone, UserPlus, Archive, RotateCcw, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { humanizeError } from '@/lib/errors';
 import { useToast } from '@/components/ui/Toast';
 import {
   Alert, Badge, Button, Card, EmptyState, Input, Modal, PageHeader, Select, TableSkeleton, Textarea,
@@ -110,16 +111,26 @@ export default function Children() {
     onError: (e: Error) => push('error', e.message),
   });
 
-  const archiveChild = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from('children').update({ status: 'archived' }).eq('id', id);
+  // Archiving and deleting both go through the database, which is what decides
+  // whether a child may be removed (any invoices/attendance => archive only).
+  const setChildState = useMutation({
+    mutationFn: async ({ id, mode }: { id: string; mode: 'archive' | 'restore' | 'delete' }) => {
+      if (mode === 'restore') {
+        const { error } = await supabase.rpc('admin_restore_child', { p_child: id });
+        if (error) throw error;
+        return;
+      }
+      const { error } = await supabase.rpc('admin_delete_child', {
+        p_child: id, p_hard: mode === 'delete',
+      });
       if (error) throw error;
     },
     onSuccess: () => {
       push('success', t('common.savedSuccessfully'));
       void qc.invalidateQueries({ queryKey: ['children'] });
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
     },
-    onError: (e: Error) => push('error', e.message),
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
   const checkDuplicates = async () => {
@@ -201,9 +212,29 @@ export default function Children() {
                       <div className="flex justify-end gap-1">
                         <Link to={`/children/${c.id}`}><Button variant="ghost" size="sm">{t('common.view')}</Button></Link>
                         {can('children.archive') && c.status === 'active' && (
-                          <Button variant="ghost" size="sm" onClick={() => {
-                            if (window.confirm(t('common.confirmDelete'))) archiveChild.mutate(c.id);
+                          <Button variant="ghost" size="sm" title={isRtl ? 'أرشفة' : 'Archive'} onClick={() => {
+                            if (window.confirm(isRtl
+                              ? 'أرشفة الطفل؟ البيانات المالية والحضور تبقى محفوظة.'
+                              : 'Archive this child? Financial and attendance history is kept.')) {
+                              setChildState.mutate({ id: c.id, mode: 'archive' });
+                            }
                           }}><Archive className="h-3.5 w-3.5" /></Button>
+                        )}
+                        {can('children.archive') && c.status === 'archived' && (
+                          <Button variant="ghost" size="sm" title={isRtl ? 'استرجاع' : 'Restore'}
+                            onClick={() => setChildState.mutate({ id: c.id, mode: 'restore' })}>
+                            <RotateCcw className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        {can('children.archive') && context?.is_super_admin && c.status === 'archived' && (
+                          <Button variant="ghost" size="sm" title={isRtl ? 'حذف نهائي' : 'Delete permanently'}
+                            onClick={() => {
+                              if (window.confirm(isRtl
+                                ? 'حذف نهائي لا يمكن التراجع عنه. لو فيه فواتير أو حضور هيترفض.'
+                                : 'Permanent delete, cannot be undone. Refused if any history exists.')) {
+                                setChildState.mutate({ id: c.id, mode: 'delete' });
+                              }
+                            }}><Trash2 className="h-3.5 w-3.5" /></Button>
                         )}
                       </div>
                     </td>

@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
 import CrudPage from '@/components/CrudPage';
 import { Badge } from '@/components/ui';
+import { Archive, RotateCcw, Trash2 } from 'lucide-react';
 
 export default function Parents() {
   const { t, i18n } = useTranslation();
@@ -36,6 +37,36 @@ export default function Parents() {
           render: (r) => r.profile_id
             ? <Badge tone="brand">{t('common.yes')}</Badge>
             : <Badge tone="neutral">{t('common.no')}</Badge> },
+      ]}
+      rowActions={[
+        {
+          key: 'deactivate',
+          label: isRtl ? 'تعطيل' : 'Deactivate',
+          icon: <Archive className="h-3.5 w-3.5" />,
+          visible: (r) => r.status === 'active' && can('parents.manage'),
+          confirm: isRtl
+            ? 'تعطيل ولي الأمر؟ لن يظهر في قوائم الإضافة لكن بياناته تبقى.'
+            : 'Deactivate this parent? They stop appearing in pickers but keep their data.',
+          rpc: (r) => ({ fn: 'admin_delete_parent', args: { p_parent: r.id, p_hard: false } }),
+        },
+        {
+          key: 'restore',
+          label: isRtl ? 'تفعيل' : 'Restore',
+          icon: <RotateCcw className="h-3.5 w-3.5" />,
+          visible: (r) => r.status !== 'active' && can('parents.manage'),
+          rpc: (r) => ({ fn: 'admin_restore_parent', args: { p_parent: r.id } }),
+        },
+        {
+          key: 'delete',
+          label: isRtl ? 'حذف نهائي' : 'Delete permanently',
+          icon: <Trash2 className="h-3.5 w-3.5" />,
+          tone: 'danger' as const,
+          visible: (r) => context?.is_super_admin === true && r.status !== 'active',
+          confirm: isRtl
+            ? 'حذف نهائي لا يمكن التراجع عنه. هيترفض لو عليه فواتير أو أطفال.'
+            : 'Permanent delete, cannot be undone. Refused if linked to children or invoices.',
+          rpc: (r) => ({ fn: 'admin_delete_parent', args: { p_parent: r.id, p_hard: true } }),
+        },
       ]}
     />
   );

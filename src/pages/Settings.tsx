@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Save, Settings2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { humanizeError } from '@/lib/errors';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/Toast';
 import { Badge, Button, Card, CardHeader, EmptyState, Input, PageHeader, TableSkeleton } from '@/components/ui';
@@ -50,7 +51,7 @@ export default function Settings() {
       if (error) throw error;
     },
     onSuccess: () => { push('success', t('common.savedSuccessfully')); void qc.invalidateQueries({ queryKey: ['settings'] }); },
-    onError: (e: Error) => push('error', e.message),
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
   const saveBranch = useMutation({
@@ -71,7 +72,7 @@ export default function Settings() {
       await refresh();
       void qc.invalidateQueries({ queryKey: ['branch-settings'] });
     },
-    onError: (e: Error) => push('error', e.message),
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
   const asText = (v: unknown) => (typeof v === 'string' ? JSON.stringify(v) : JSON.stringify(v, null, 0));

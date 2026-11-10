@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/Toast';
 import { Badge, Button, EmptyState, Input, Modal, PageHeader, Select, TableSkeleton } from '@/components/ui';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import { humanizeError } from '@/lib/errors';
 
 interface Sub {
   id: string; status: string; start_date: string; end_date: string; total_price: number;
@@ -75,7 +76,7 @@ export default function Subscriptions() {
       void qc.invalidateQueries({ queryKey: ['subscriptions'] });
       void qc.invalidateQueries({ queryKey: ['dashboard'] });
     },
-    onError: (e: Error) => push('error', e.message),
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
   const renew = useMutation({
@@ -84,7 +85,7 @@ export default function Subscriptions() {
       if (error) throw error;
     },
     onSuccess: () => { push('success', t('common.savedSuccessfully')); void qc.invalidateQueries({ queryKey: ['subscriptions'] }); },
-    onError: (e: Error) => push('error', e.message),
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
   const setStatus = useMutation({
@@ -93,7 +94,7 @@ export default function Subscriptions() {
       if (error) throw error;
     },
     onSuccess: () => { push('success', t('common.savedSuccessfully')); void qc.invalidateQueries({ queryKey: ['subscriptions'] }); },
-    onError: (e: Error) => push('error', e.message),
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
   return (

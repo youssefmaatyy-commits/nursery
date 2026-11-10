@@ -241,3 +241,100 @@ server-only block).
    and low-stock/overdue notifications.
 6. Add the Playwright E2E suite on a machine with browser access; wire an
    Edge Function for WhatsApp/SMS absence reminders.
+
+## 5c. Staff accounts & role permissions (migration 0014)
+
+Before 0014 the system had **no way to create a user account**. `employees` rows
+existed with a `profile_id` column, but nothing in `src/` ever called
+`auth.users`, `user_roles` or any invite flow — so "adding an employee" produced
+an HR record that could not log in.
+
+`0014_staff_accounts.sql` adds seven SECURITY DEFINER RPCs. All are gated and
+audited; the browser never needs a service-role key.
+
+| RPC | Permission gate | Notes |
+| --- | --- | --- |
+| `admin_list_staff_accounts()` | `employees.manage` or `roles.manage` | profiles ⋈ auth.users ⋈ employees, roles as JSON |
+| `admin_create_staff_account(...)` | `employees.manage` | creates auth user + identity + profile + role (+ employee row) |
+| `admin_set_user_role(user, role_code, branch)` | `roles.manage` | super_admin only by a super admin |
+| `admin_remove_user_role(user, role_id)` | `roles.manage` | refuses to remove the last super admin |
+| `admin_set_user_active(user, active)` | `employees.manage` | `profiles.is_active` is what `has_permission()` checks |
+| `admin_reset_user_password(user, password)` | `employees.manage` | min 12 chars |
+| `admin_set_role_permission(role, perm, enabled)` | `roles.manage` | super_admin not editable (it bypasses the check) |
+
+### Two traps found while building this
+
+1. **`gen_salt()` / `crypt()` live in the `extensions` schema**, not `public`.
+   A function with `set search_path = public` fails with
+   `42883: function gen_salt(unknown, integer) does not exist`. Use
+   `set search_path = public, extensions` and qualify the calls.
+2. **`profiles.email` is `citext`.** A `RETURNS TABLE (... email text ...)`
+   function must cast (`p.email::text`) or it raises
+   `42804: structure of query does not match function result type`.
+
+## 5d. Guardians, deletion, and forced password change (migration 0015)
+
+### Multiple guardians per child
+`child_guardians` was already a many-to-many table, but the UI could only ever
+write **one** row — created inline when a child was registered. `ChildDetail`
+showed the guardians and then linked to `/parents`, which did not attach anything.
+
+- `child_guardian_upsert(...)` — attaches or edits a guardian. Promoting one to
+  primary demotes the rest, so exactly one primary can exist.
+- `child_guardian_unlink(link)` — refuses with
+  `child_needs_at_least_one_guardian` if it would leave a child with nobody.
+- `ChildDetail` now has a real "add guardian" modal and an unlink button per row.
+
+### Deleting a child or a parent
+Seven tables reference `children` **without** `ON DELETE CASCADE` (invoices,
+subscriptions, kids area sessions, nursery attendance, enrolments, daily
+reports, subscription usage), so a hard delete either fails or would orphan
+financial history. The rule is enforced in the database, not the UI:
+
+| Action | Behaviour |
+| --- | --- |
+| Archive child | `status = 'archived'`; keeps all history. Restorable. |
+| Hard-delete child | super admin only; **refused** with the blocking counts if any history exists |
+| Deactivate parent | `status = 'inactive'`; disappears from pickers, keeps invoices |
+| Hard-delete parent | super admin only; refused if linked to children or invoices |
+
+`child_history_counts()` returns the counts so the UI can explain the refusal
+instead of failing silently.
+
+Verified live: `admin_delete_child(..., hard => true)` on a child with 2
+invoices + 1 subscription + 2 sessions returned
+`has_history_use_archive: {"invoices": 2, "subscriptions": 1, ...}`; the archive
+path succeeded; `admin_delete_parent(hard)` on a linked parent returned
+`parent_has_children_unlink_first`; `child_guardian_unlink` on a child's only
+guardian returned `child_needs_at_least_one_guardian`.
+
+### Forced first-login password change
+`Login.tsx` used to print "the bootstrap password must be changed on first
+sign-in" while **nothing enforced it**. Now:
+
+- `profiles.must_change_password` exists; `admin_create_staff_account()` sets it.
+- `change_own_password(text)` (SECURITY DEFINER) rotates the password and clears
+  the flag for the caller — no service-role key needed in the browser.
+- `RequireAuth` renders `<ChangePassword forced />` instead of the app whenever
+  the flag is set, so a temporary password cannot be kept in use.
+
+Verified live: a new account came back with `must_change_password = true` and
+`my_context()` exposed it; calling `change_own_password` flipped it to `false`.
+
+### No more raw database codes in the UI
+20 call sites showed `e.message` verbatim — which is why a super admin without a
+branch saw the bare word `branch_forbidden` as the whole page. They now go
+through `humanizeError()`, which maps ~22 stable codes to AR/EN sentences and
+expands `has_history_use_archive` into readable counts. `RequireAuth` also shows
+an explanatory screen instead of the raw error when an account has no branch.
+
+A unit test caught a real ordering bug here: `'forbidden'` is a substring of
+`'branch_forbidden'`, so the map matched the wrong message. The lookup now sorts
+candidates longest-first — see `tests/errors.test.ts`.
+
+### Admin UI added
+- **`/staff`** — list every account with its roles; create a staff account
+  (email, temporary password, role, employee code, job, salary); add/remove a
+  role; reset a password; activate/deactivate.
+- **`/roles`** — the permission matrix is now interactive. `super_admin` is shown
+  as always-granted and is not editable (it short-circuits `has_permission`).

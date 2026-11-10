@@ -13,6 +13,7 @@ import {
   Alert, Badge, Button, Card, CardHeader, EmptyState, Input, Modal, PageHeader, Select, TableSkeleton,
 } from '@/components/ui';
 import { formatDateTime, minutesToHuman } from '@/lib/utils';
+import { humanizeError } from '@/lib/errors';
 
 interface SearchResult {
   id: string; child_code: string; full_name_en: string; full_name_ar: string;
@@ -82,7 +83,7 @@ export default function Operations() {
       void qc.invalidateQueries({ queryKey: ['inside-op'] });
       void qc.invalidateQueries({ queryKey: ['dashboard'] });
     },
-    onError: (e: Error) => push('error', e.message),
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
   const checkOut = useMutation({
@@ -125,7 +126,7 @@ export default function Operations() {
       void qc.invalidateQueries({ queryKey: ['inside-op'] });
       void qc.invalidateQueries({ queryKey: ['dashboard'] });
     },
-    onError: (e: Error) => push('error', e.message),
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
   const syncNow = async () => {

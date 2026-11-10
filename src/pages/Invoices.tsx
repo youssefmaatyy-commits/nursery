@@ -9,6 +9,7 @@ import {
   Badge, Button, EmptyState, Input, Modal, PageHeader, Select, TableSkeleton,
 } from '@/components/ui';
 import { downloadCsv, formatCurrency, formatDateTime, newIdempotencyKey, printElement } from '@/lib/utils';
+import { humanizeError } from '@/lib/errors';
 
 interface InvoiceRow {
   id: string; invoice_number: string; total: number; paid_amount: number; balance: number;
@@ -79,7 +80,7 @@ export default function Invoices() {
       void qc.invalidateQueries({ queryKey: ['dashboard'] });
       setSelected(null);
     },
-    onError: (e: Error) => push('error', e.message),
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
   const doRefund = useMutation({
@@ -97,7 +98,7 @@ export default function Invoices() {
       void qc.invalidateQueries({ queryKey: ['invoices'] });
       void qc.invalidateQueries({ queryKey: ['invoice-detail'] });
     },
-    onError: (e: Error) => push('error', e.message),
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
   const filtered = (invoices ?? []).filter((inv) => {

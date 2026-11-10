@@ -63,13 +63,14 @@ export default function AppLayout() {
         { to: '/inventory', label: t('nav.inventory'), icon: <Package className="h-4.5 w-4.5" />, permission: 'inventory.view' },
         { to: '/suppliers', label: t('nav.suppliers'), icon: <Truck className="h-4.5 w-4.5" />, permission: 'inventory.view' },
         { to: '/employees', label: t('nav.employees'), icon: <UserCog className="h-4.5 w-4.5" />, permission: 'employees.view' },
+        { to: '/staff', label: isRtl ? 'الموظفين والحسابات' : 'Staff & accounts', icon: <Users className="h-4.5 w-4.5" />, permission: ['employees.manage', 'roles.manage'] },
         { to: '/roles', label: t('nav.roles'), icon: <Shield className="h-4.5 w-4.5" />, permission: 'roles.manage' },
         { to: '/audit', label: t('nav.audit'), icon: <ScrollText className="h-4.5 w-4.5" />, permission: 'audit.view' },
         { to: '/reports', label: t('nav.reports'), icon: <BarChart3 className="h-4.5 w-4.5" />, permission: 'reports.view' },
         { to: '/settings', label: t('nav.settings'), icon: <Settings className="h-4.5 w-4.5" />, permission: 'settings.manage' },
       ],
     },
-  ], [t]);
+  ], [t, isRtl]);
 
   const displayName = isRtl
     ? context?.profile?.full_name_ar || context?.profile?.full_name_en || context?.profile?.email

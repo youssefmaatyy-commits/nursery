@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/Toast';
 import { Badge, Button, Card, CardHeader, EmptyState, Input, Modal, PageHeader, Select, TableSkeleton } from '@/components/ui';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import { humanizeError } from '@/lib/errors';
 
 interface Enrollment {
   id: string; plan_type: string; fee_amount: number; enrollment_fee: number; discount: number;
@@ -95,7 +96,7 @@ export default function Nursery() {
       setShowEnroll(false);
       void qc.invalidateQueries({ queryKey: ['enrollments'] });
     },
-    onError: (e: Error) => push('error', e.message),
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
   return (

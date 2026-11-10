@@ -7,6 +7,7 @@ export interface AppContext {
   profile: {
     id: string; full_name_en: string | null; full_name_ar: string | null; email: string | null;
     phone: string | null; locale: 'ar' | 'en'; default_branch_id: string | null; is_active: boolean;
+    must_change_password?: boolean;
   } | null;
   roles: string[];
   permissions: string[];
