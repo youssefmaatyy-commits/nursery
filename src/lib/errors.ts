@@ -85,6 +85,20 @@ const MESSAGES: Record<string, { ar: string; en: string }> = {
     en: 'This parent has invoices. Deleting would break the books — deactivate instead.',
   },
   not_authenticated: { ar: 'لازم تسجل دخول تاني.', en: 'You need to sign in again.' },
+
+  // registration (0016)
+  child_name_and_dob_required: {
+    ar: 'اسم الطفل وتاريخ الميلاد مطلوبين.',
+    en: 'The child needs a name and a date of birth.',
+  },
+  parent_name_and_phone_required: {
+    ar: 'اسم ولي الأمر ورقم الهاتف مطلوبين.',
+    en: 'The guardian needs a name and a phone number.',
+  },
+  guardian_required: {
+    ar: 'لازم تختار ولي أمر أو تنشئ واحد جديد.',
+    en: 'Pick an existing guardian or create a new one.',
+  },
 };
 
 /** Map of history counts returned by `has_history_use_archive: {...}`. */

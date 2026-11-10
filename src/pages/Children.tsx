@@ -64,41 +64,35 @@ export default function Children() {
     enabled: showForm,
   });
 
+  // Registration is one SECURITY DEFINER call. It used to be three sequential
+  // inserts (parent -> child -> guardian) with no transaction across them, so a
+  // failure on the last one left an orphan parent and a child with no guardian.
   const createChild = useMutation({
     mutationFn: async () => {
-      if (!branchId) throw new Error('No branch');
-      const client = supabase;
-      let parentId = form.parent_id;
-
-      if (form.parent_mode === 'new') {
-        const { data: newParent, error: pErr } = await client.from('parents').insert({
-          full_name_en: form.parent_name_en, full_name_ar: form.parent_name_ar,
-          phone: form.parent_phone, branch_id: branchId,
-        }).select('id').single();
-        if (pErr) throw pErr;
-        parentId = newParent.id;
-      }
-      if (!parentId) throw new Error('guardian_required');
-
-      const { data: child, error: cErr } = await client.from('children').insert({
-        branch_id: branchId,
-        full_name_en: form.full_name_en, full_name_ar: form.full_name_ar,
-        date_of_birth: form.date_of_birth, gender: form.gender,
-        allergies: form.allergies || null, medical_notes: form.medical_notes || null,
-        special_care: form.special_care || null,
-        emergency_contact_name: form.emergency_contact_name || null,
-        emergency_contact_phone: form.emergency_contact_phone || null,
-        created_by: context?.user_id,
-      }).select('id').single();
-      if (cErr) throw cErr;
-
-      const { error: lErr } = await client.from('child_guardians').insert({
-        child_id: child.id, parent_id: parentId,
-        relation: form.parent_mode === 'new' ? form.parent_relation : 'guardian',
-        is_primary: true, can_pickup: true, financial_responsible: true,
+      if (!branchId) throw new Error('branch_required');
+      const { data, error } = await supabase.rpc('create_child_with_guardian', {
+        p_branch: branchId,
+        p_child: {
+          full_name_en: form.full_name_en,
+          full_name_ar: form.full_name_ar,
+          date_of_birth: form.date_of_birth,
+          gender: form.gender,
+          allergies: form.allergies,
+          medical_notes: form.medical_notes,
+          special_care: form.special_care,
+          emergency_contact_name: form.emergency_contact_name,
+          emergency_contact_phone: form.emergency_contact_phone,
+        },
+        p_parent_id: form.parent_mode === 'existing' ? form.parent_id : null,
+        p_new_parent: form.parent_mode === 'new' ? {
+          full_name_en: form.parent_name_en,
+          full_name_ar: form.parent_name_ar,
+          phone: form.parent_phone,
+        } : null,
+        p_relation: form.parent_relation,
       });
-      if (lErr) throw lErr;
-      return child;
+      if (error) throw error;
+      return data as unknown as { child_id: string; child_code: string };
     },
     onSuccess: () => {
       push('success', t('common.savedSuccessfully'));
@@ -108,7 +102,7 @@ export default function Children() {
       void qc.invalidateQueries({ queryKey: ['children'] });
       void qc.invalidateQueries({ queryKey: ['dashboard'] });
     },
-    onError: (e: Error) => push('error', e.message),
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
   // Archiving and deleting both go through the database, which is what decides

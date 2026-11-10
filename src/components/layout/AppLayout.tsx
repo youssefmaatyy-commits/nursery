@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, Baby, DoorOpen, Blocks, School, GraduationCap, CalendarCheck,
   ClipboardList, CreditCard, Receipt, Wallet, TrendingDown, Package, Truck, UserCog, Shield,
   Bell, Settings, ScrollText, BarChart3, LogOut, Menu, X, Wifi, WifiOff, Languages,
-  RefreshCw, Search, ChevronDown, Heart,
+  RefreshCw, Search, ChevronDown, Heart, CalendarDays, KeyRound,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -45,6 +45,7 @@ export default function AppLayout() {
         { to: '/nursery', label: t('nav.nursery'), icon: <School className="h-4.5 w-4.5" />, permission: ['nursery.view', 'nursery.operate'] },
         { to: '/classrooms', label: t('nav.classrooms'), icon: <GraduationCap className="h-4.5 w-4.5" />, permission: ['nursery.view', 'nursery.manage_classes'] },
         { to: '/daily-reports', label: t('nav.dailyReports'), icon: <ClipboardList className="h-4.5 w-4.5" />, permission: 'nursery.reports' },
+        { to: '/calendar', label: isRtl ? 'التقويم والإجازات' : 'Calendar', icon: <CalendarDays className="h-4.5 w-4.5" />, permission: ['nursery.view', 'nursery.manage_classes'] },
         { to: '/subscriptions', label: t('nav.subscriptions'), icon: <CalendarCheck className="h-4.5 w-4.5" />, permission: ['subscriptions.view', 'subscriptions.manage'] },
       ],
     },
@@ -205,6 +206,10 @@ export default function AppLayout() {
                       <button onClick={() => { setUserMenu(false); navigate('/notifications'); }}
                         className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50">
                         <Bell className="h-4 w-4" /> {t('common.notifications')}
+                      </button>
+                      <button onClick={() => { setUserMenu(false); navigate('/change-password'); }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50">
+                        <KeyRound className="h-4 w-4" /> {isRtl ? 'تغيير كلمة المرور' : 'Change password'}
                       </button>
                       <button onClick={() => { setUserMenu(false); navigate('/sync'); }}
                         className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50">

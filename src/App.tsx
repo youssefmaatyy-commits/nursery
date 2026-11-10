@@ -33,6 +33,7 @@ const ParentPortal = lazy(() => import('@/pages/ParentPortal'));
 const ResetPassword = lazy(() => import('@/pages/ResetPassword'));
 const Setup = lazy(() => import('@/pages/Setup'));
 const Staff = lazy(() => import('@/pages/Staff'));
+const Calendar = lazy(() => import('@/pages/Calendar'));
 const ChangePassword = lazy(() => import('@/pages/ChangePassword'));
 
 function Loading() {
@@ -121,6 +122,7 @@ export default function App() {
           <Route path="/suppliers" element={<Suppliers />} />
           <Route path="/employees" element={<Employees />} />
           <Route path="/staff" element={<Staff />} />
+          <Route path="/calendar" element={<Calendar />} />
           <Route path="/change-password" element={<ChangePassword />} />
           <Route path="/roles" element={<Roles />} />
           <Route path="/settings" element={<Settings />} />
