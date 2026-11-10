@@ -24,32 +24,39 @@
 | Scheduled jobs | ✅ 2 cron jobs active | `cron.job`: expiry sweep, audit retention |
 | Edge Function | ✅ deployed **and booting** | slug `absence-reminder`; unauthenticated call → `401 {"error":"unauthorized"}` |
 | Deployment config | ✅ | `vercel.json`, `.github/workflows/ci.yml` |
-| Vercel production deploy | ✅ built & READY | `dpl_2CvwX84peuFwbr4QX4gXQveS6Pxs`, env vars baked in |
+| Vercel production deploy | ✅ **serving the app** | `nursery-zhre.vercel.app` → Arabic RTL login, title "Kids Area & Nursery ERP" |
 | Reproducible install | ✅ | `npm ci --legacy-peer-deps` → 623 packages from committed lockfile |
 
 ### URLs
 
-- **Repository:** https://github.com/youssefmaatyy-commits/nursery
-- **Pull request (open):** https://github.com/youssefmaatyy-commits/nursery/pull/1
-- **Vercel production deployment:** `https://nursery-youssef-maaty.vercel.app`
-  (deployment `dpl_2CvwX84peuFwbr4QX4gXQveS6Pxs`, state **READY**, target
-  **production**, alias assigned). Built from `f44c12b` with
-  `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` present, so the bundle is wired
-  to the database — no `/setup` step is needed.
-- **Preview:** `https://nursery-git-arena-3fdc8dda-nursery-youssef-maaty.vercel.app`
-- ⚠️ **Both URLs currently answer with a Vercel login page.** The project has
-  `ssoProtection.deploymentType = "all_except_custom_domains"`. Verified by
-  creating a throwaway project: a **new** project on this team is created with
-  the identical setting, so it is a team-level deployment-protection default, not
-  a per-project mistake. The connector's `update_project` schema has no
-  protection field, and the team has no custom domain (which would be exempt).
-  The only fix is a UI/API action: **Vercel → Team Settings → Deployment
-  Protection → Vercel Authentication: Disabled**, or add a custom domain to the
-  project.
-- **Local dev server:** running in this workspace on port **5173/5174**
-  (`https://<port>-<sandboxId>.e2b.app`), `GET /` → 200, Arabic RTL shell.
+- **Repository:** https://github.com/youssefmaatyy-commits/nursery (main branch now holds the full app)
+- **Live app (working):** https://nursery-zhre.vercel.app
+- **Production deployment:** `dpl_3jHxcFC9d743BrewdsG2sju47XRz` on project `nursery-zhre`
+  (`prj_vboR3MKydmHJZ7j4O1mp0y7o8hA0`), built from `main` @ `dbb5163`
+- **Second project:** `nursery` (`prj_D5PM1Ij5T9nqa3ARBGRnxAwumYvg`) also deploys
+  the same repo with env vars set
 
----
+### ⚠️ Deployment protection (important)
+
+Every project on this team is created with
+`ssoProtection.deploymentType = "all_except_custom_domains"`. Consequences:
+
+| URL kind | Result |
+| --- | --- |
+| Bare alias `nursery-zhre.vercel.app` | ✅ serves the app (bypasses protection) |
+| Deployment URL `*-youssef-maaty.vercel.app` | 🔒 Vercel login page |
+| Git alias `*-git-main-*.vercel.app` | 🔒 Vercel login page |
+
+So **share the bare alias** (`https://nursery-zhre.vercel.app`). To make every
+alias public, disable Vercel Authentication in
+**Team Settings → Deployment Protection**.
+
+### Supabase redirect URLs
+
+`site_url` is `https://nursery-youssef-maaty.vercel.app`; the allow-list covers
+that host, `nursery-git-main-…`, `localhost:5173` and `localhost:4173`. Password
+reset from the `nursery-zhre` host will be rejected until
+`https://nursery-zhre.vercel.app/**` is added to the redirect allow-list.
 
 ## 2. Supabase
 
@@ -197,6 +204,41 @@ Env template: `.env.example` (browser-safe `VITE_*` block + clearly separated
 server-only block).
 
 ---
+
+## 5b. Troubleshooting: `404 NOT_FOUND` on a Vercel URL
+
+Observed on `https://nursery-zhre.vercel.app/`. Two independent causes, both
+diagnosable from the build log and the deployment record:
+
+1. **Wrong build settings.** The `nursery-zhre` project was auto-created by a
+   Vercel "import suggestion" with framework `null`, meaning no build command and
+   no output directory. The log showed, in 19 ms:
+
+   ```
+   WARNING! Build output contains no "functions", "static", or "services"
+   directory; the build may not have produced any deployable output.
+   ```
+
+   Fix: set framework `vite`, build `npm run build`, output `dist`, install
+   `npm ci --legacy-peer-deps`.
+
+2. **The deployed commit had no app.** That project tracks `main`, and `main` was
+   still at the one-line `Initial commit` (`8272c16`). Redeploying changes nothing
+   until the app is actually on `main`.
+
+After fixing both, the bare alias still 404'd because Vercel had it pinned to the
+original empty deployment. Removing and re-adding `nursery-zhre.vercel.app` on the
+project re-pointed it at the current READY deployment, and the app appeared.
+
+**Checklist when a Vercel URL 404s:**
+
+| Step | Command / check |
+| --- | --- |
+| Is a deployment READY? | `list_deployments` for the project |
+| Did the build emit output? | `get_deployment_events` → look for the empty-output warning |
+| Which commit is deployed? | `deployment.gitSource.sha` vs `git log origin/main` |
+| Is the alias attached? | `list_project_domains` |
+| Is it a stale edge cache? | request ID repeats ⇒ cached; retry with a query string |
 
 ## 6. Known limitations — stated plainly
 
