@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { School, UserPlus, CheckCircle2, XCircle, ClipboardList } from 'lucide-react';
+import { School, UserPlus, CheckCircle2, XCircle, ClipboardList, Trash2, Plus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/Toast';
@@ -16,6 +16,16 @@ interface Enrollment {
   classrooms: { id: string; name_en: string; name_ar: string } | null;
 }
 
+interface TeachingRow {
+  id: string; classroom_id: string; employee_id: string; role: string;
+  classrooms: { name_en: string; name_ar: string } | null;
+  employees: { employee_code: string; profiles: { full_name_en: string; full_name_ar: string } | null } | null;
+}
+interface StaffOption {
+  id: string; employee_code: string;
+  profiles: { full_name_en: string; full_name_ar: string } | null;
+}
+
 export default function Nursery() {
   const { t, i18n } = useTranslation();
   const { context, can } = useAuth();
@@ -27,8 +37,82 @@ export default function Nursery() {
 
   const [showEnroll, setShowEnroll] = useState(false);
   const [enroll, setEnroll] = useState({
-    child_id: '', classroom_id: '', plan_type: 'monthly', fee_amount: '2500',
+    // Deliberately empty: the monthly fee comes from the selected classroom's
+    // `monthly_fee`, never from a literal. A hardcoded 2500 was here before and
+    // silently overrode the branch's real price.
+    child_id: '', classroom_id: '', plan_type: 'monthly', fee_amount: '',
     enrollment_fee: '0', discount: '0', billing_day: '1',
+  });
+
+  const [showAssign, setShowAssign] = useState(false);
+  const [assign, setAssign] = useState({ classroom_id: '', employee_id: '', role: 'assistant' });
+
+  const { data: teaching } = useQuery({
+    queryKey: ['classroom-teachers', branchId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('classroom_teachers')
+        .select('id, classroom_id, employee_id, role, classrooms(name_en, name_ar), employees(employee_code, profiles(full_name_en, full_name_ar))')
+        .limit(300);
+      if (error) throw error;
+      return data as unknown as TeachingRow[];
+    },
+    enabled: Boolean(branchId),
+  });
+
+  const { data: staffOptions } = useQuery({
+    queryKey: ['staff-options', branchId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('employees')
+        .select('id, employee_code, profiles(full_name_en, full_name_ar)')
+        .eq('employment_status', 'active').order('employee_code');
+      if (error) throw error;
+      return data as unknown as StaffOption[];
+    },
+    enabled: showAssign,
+  });
+
+  const { data: classroomOptions } = useQuery({
+    queryKey: ['classroom-options-all', branchId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('classrooms')
+        .select('id, name_en, name_ar').eq('is_active', true).order('name_en');
+      if (error) throw error;
+      return data as Array<{ id: string; name_en: string; name_ar: string }>;
+    },
+    enabled: showAssign,
+  });
+
+  const assignTeacher = useMutation({
+    mutationFn: async () => {
+      if (!assign.classroom_id || !assign.employee_id) throw new Error('child_required');
+      // unique (classroom_id, employee_id) — let the database reject a duplicate
+      // rather than silently creating a second row.
+      const { error } = await supabase.from('classroom_teachers').insert({
+        classroom_id: assign.classroom_id,
+        employee_id: assign.employee_id,
+        role: assign.role,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      push('success', t('common.savedSuccessfully'));
+      setShowAssign(false);
+      setAssign({ classroom_id: '', employee_id: '', role: 'assistant' });
+      void qc.invalidateQueries({ queryKey: ['classroom-teachers'] });
+    },
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
+  });
+
+  const removeTeacher = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('classroom_teachers').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      push('success', t('common.savedSuccessfully'));
+      void qc.invalidateQueries({ queryKey: ['classroom-teachers'] });
+    },
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
   const { data: enrollments, isLoading } = useQuery({
@@ -75,12 +159,17 @@ export default function Nursery() {
 
   const createEnrollment = useMutation({
     mutationFn: async () => {
+      if (!enroll.child_id) throw new Error('child_required');
+      // `Number('')` is 0, which would persist a free enrollment. The fee is
+      // required and must come from the classroom, not from an empty field.
+      const fee = Number(enroll.fee_amount);
+      if (!enroll.fee_amount || !Number.isFinite(fee) || fee <= 0) throw new Error('fee_required');
       const { error } = await supabase.from('nursery_enrollments').insert({
         branch_id: branchId,
         child_id: enroll.child_id,
         classroom_id: enroll.classroom_id || null,
         plan_type: enroll.plan_type,
-        fee_amount: Number(enroll.fee_amount),
+        fee_amount: fee,
         enrollment_fee: Number(enroll.enrollment_fee),
         discount: Number(enroll.discount),
         billing_day: Number(enroll.billing_day),
@@ -162,6 +251,59 @@ export default function Nursery() {
             </ul>
           )}
         </Card>
+
+        <Card className="lg:col-span-5">
+          <CardHeader
+            title={isRtl ? 'المدرسين المسندين للفصول' : 'Classroom teachers'}
+            action={can(['nursery.manage_classes', 'nursery.enroll']) && (
+              <Button variant="secondary" size="sm" onClick={() => setShowAssign(true)}>
+                <Plus className="h-3.5 w-3.5" /> {isRtl ? 'إسناد' : 'Assign'}
+              </Button>
+            )}
+          />
+          {!teaching?.length ? (
+            <EmptyState
+              title={isRtl ? 'مفيش مدرسين مسندين' : 'No teachers assigned'}
+              description={isRtl
+                ? 'أسند كل موظف للفصل اللي بيدرّسه.'
+                : 'Assign each staff member to the classroom they teach.'}
+            />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="table">
+                <thead><tr>
+                  <th>{t('nursery.classroom')}</th>
+                  <th>{isRtl ? 'الموظف' : 'Staff member'}</th>
+                  <th>{isRtl ? 'الدور' : 'Role'}</th>
+                  <th>{t('common.actions')}</th>
+                </tr></thead>
+                <tbody>
+                  {teaching.map((r) => (
+                    <tr key={r.id}>
+                      <td>{r.classrooms ? (isRtl ? r.classrooms.name_ar : r.classrooms.name_en) : '—'}</td>
+                      <td>
+                        <p className="font-medium">
+                          {r.employees?.profiles
+                            ? (isRtl ? r.employees.profiles.full_name_ar : r.employees.profiles.full_name_en)
+                            : r.employees?.employee_code ?? '—'}
+                        </p>
+                        <p className="text-xs text-slate-400">{r.employees?.employee_code}</p>
+                      </td>
+                      <td><Badge tone={r.role === 'lead' ? 'brand' : 'neutral'}>{r.role}</Badge></td>
+                      <td>
+                        {can(['nursery.manage_classes', 'nursery.enroll']) && (
+                          <Button variant="ghost" size="sm" onClick={() => removeTeacher.mutate(r.id)}>
+                            <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
       </div>
 
       <Modal open={showEnroll} onClose={() => setShowEnroll(false)} title={t('nursery.enroll')}
@@ -204,6 +346,44 @@ export default function Nursery() {
             <Input label={t('nursery.billingDay')} type="number" min="1" max="28" value={enroll.billing_day}
               onChange={(e) => setEnroll({ ...enroll, billing_day: e.target.value })} />
           </div>
+        </div>
+      </Modal>
+
+      <Modal open={showAssign} onClose={() => setShowAssign(false)}
+        title={isRtl ? 'إسناد مدرس لفصل' : 'Assign a teacher'}
+        footer={<>
+          <Button variant="secondary" onClick={() => setShowAssign(false)}>{t('common.cancel')}</Button>
+          <Button loading={assignTeacher.isPending} onClick={() => assignTeacher.mutate()}>
+            {t('common.save')}
+          </Button>
+        </>}>
+        <div className="space-y-3">
+          <Select label={t('nursery.classroom')} required value={assign.classroom_id}
+            onChange={(e) => setAssign({ ...assign, classroom_id: e.target.value })}>
+            <option value="">—</option>
+            {classroomOptions?.map((c) => (
+              <option key={c.id} value={c.id}>{isRtl ? c.name_ar : c.name_en}</option>
+            ))}
+          </Select>
+          <Select label={isRtl ? 'الموظف' : 'Staff member'} required value={assign.employee_id}
+            onChange={(e) => setAssign({ ...assign, employee_id: e.target.value })}>
+            <option value="">—</option>
+            {staffOptions?.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.employee_code} · {s.profiles ? (isRtl ? s.profiles.full_name_ar : s.profiles.full_name_en) : ''}
+              </option>
+            ))}
+          </Select>
+          <Select label={isRtl ? 'الدور' : 'Role'} value={assign.role}
+            onChange={(e) => setAssign({ ...assign, role: e.target.value })}>
+            <option value="lead">{isRtl ? 'مدرس أساسي' : 'Lead'}</option>
+            <option value="assistant">{isRtl ? 'مساعد' : 'Assistant'}</option>
+          </Select>
+          <p className="text-xs text-slate-500">
+            {isRtl
+              ? 'الموظف الواحد ميتسندش لنفس الفصل مرتين.'
+              : 'The same staff member cannot be assigned to the same classroom twice.'}
+          </p>
         </div>
       </Modal>
     </div>

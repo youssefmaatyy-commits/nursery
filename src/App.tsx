@@ -34,6 +34,10 @@ const ResetPassword = lazy(() => import('@/pages/ResetPassword'));
 const Setup = lazy(() => import('@/pages/Setup'));
 const Staff = lazy(() => import('@/pages/Staff'));
 const Calendar = lazy(() => import('@/pages/Calendar'));
+const Purchases = lazy(() => import('@/pages/Purchases'));
+const Documents = lazy(() => import('@/pages/Documents'));
+const Attendance = lazy(() => import('@/pages/Attendance'));
+const Categories = lazy(() => import('@/pages/Categories'));
 const ChangePassword = lazy(() => import('@/pages/ChangePassword'));
 
 function Loading() {
@@ -123,6 +127,10 @@ export default function App() {
           <Route path="/employees" element={<Employees />} />
           <Route path="/staff" element={<Staff />} />
           <Route path="/calendar" element={<Calendar />} />
+          <Route path="/purchases" element={<Purchases />} />
+          <Route path="/documents" element={<Documents />} />
+          <Route path="/attendance" element={<Attendance />} />
+          <Route path="/categories" element={<Categories />} />
           <Route path="/change-password" element={<ChangePassword />} />
           <Route path="/roles" element={<Roles />} />
           <Route path="/settings" element={<Settings />} />

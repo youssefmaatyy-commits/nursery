@@ -32,6 +32,8 @@ export default function Inventory() {
         { name: 'name_en', label: t('common.nameEn'), required: true },
         { name: 'name_ar', label: t('common.nameAr'), required: true },
         { name: 'barcode', label: t('inventory.barcode') },
+        { name: 'category_id', label: isRtl ? 'التصنيف' : 'Category', type: 'select',
+          optionsFrom: { table: 'product_categories', labelColumnEn: 'name_en', labelColumnAr: 'name_ar' } },
         { name: 'cost_price', label: t('inventory.costPrice'), type: 'number',
           render: (r) => formatCurrency(Number(r.cost_price), locale) },
         { name: 'sale_price', label: t('inventory.salePrice'), type: 'number',

@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, Baby, DoorOpen, Blocks, School, GraduationCap, CalendarCheck,
   ClipboardList, CreditCard, Receipt, Wallet, TrendingDown, Package, Truck, UserCog, Shield,
   Bell, Settings, ScrollText, BarChart3, LogOut, Menu, X, Wifi, WifiOff, Languages,
-  RefreshCw, Search, ChevronDown, Heart, CalendarDays, KeyRound,
+  RefreshCw, Search, ChevronDown, Heart, CalendarDays, KeyRound, FileUp, ShoppingCart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -46,6 +46,8 @@ export default function AppLayout() {
         { to: '/classrooms', label: t('nav.classrooms'), icon: <GraduationCap className="h-4.5 w-4.5" />, permission: ['nursery.view', 'nursery.manage_classes'] },
         { to: '/daily-reports', label: t('nav.dailyReports'), icon: <ClipboardList className="h-4.5 w-4.5" />, permission: 'nursery.reports' },
         { to: '/calendar', label: isRtl ? 'التقويم والإجازات' : 'Calendar', icon: <CalendarDays className="h-4.5 w-4.5" />, permission: ['nursery.view', 'nursery.manage_classes'] },
+        { to: '/documents', label: isRtl ? 'المستندات' : 'Documents', icon: <FileUp className="h-4.5 w-4.5" />, permission: 'documents.view' },
+        { to: '/attendance', label: isRtl ? 'حضور الموظفين' : 'Staff attendance', icon: <CalendarCheck className="h-4.5 w-4.5" />, permission: ['hr.view', 'hr.manage', 'employees.view'] },
         { to: '/subscriptions', label: t('nav.subscriptions'), icon: <CalendarCheck className="h-4.5 w-4.5" />, permission: ['subscriptions.view', 'subscriptions.manage'] },
       ],
     },
@@ -62,6 +64,8 @@ export default function AppLayout() {
       id: 'admin', title: 'nav.sections.admin',
       items: [
         { to: '/inventory', label: t('nav.inventory'), icon: <Package className="h-4.5 w-4.5" />, permission: 'inventory.view' },
+        { to: '/categories', label: isRtl ? 'التصنيفات' : 'Categories', icon: <Blocks className="h-4.5 w-4.5" />, permission: 'inventory.view' },
+        { to: '/purchases', label: isRtl ? 'المشتريات' : 'Purchases', icon: <ShoppingCart className="h-4.5 w-4.5" />, permission: 'inventory.view' },
         { to: '/suppliers', label: t('nav.suppliers'), icon: <Truck className="h-4.5 w-4.5" />, permission: 'inventory.view' },
         { to: '/employees', label: t('nav.employees'), icon: <UserCog className="h-4.5 w-4.5" />, permission: 'employees.view' },
         { to: '/staff', label: isRtl ? 'الموظفين والحسابات' : 'Staff & accounts', icon: <Users className="h-4.5 w-4.5" />, permission: ['employees.manage', 'roles.manage'] },

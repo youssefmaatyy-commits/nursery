@@ -294,7 +294,7 @@ export default function ChildDetail() {
               {isRtl ? 'المستندات مخزنة في مخزن خاص ولا يمكن الوصول إليها إلا للمصرح لهم.'
                 : 'Documents are stored in a private bucket, accessible only to authorized staff.'}
             </p>
-            <Link to="/operations"><Button variant="secondary" size="sm" className="mt-3 w-full">
+            <Link to={`/documents?child=${id}`}><Button variant="secondary" size="sm" className="mt-3 w-full">
               {isRtl ? 'إدارة المستندات' : 'Manage documents'}
             </Button></Link>
           </Card>

@@ -25,6 +25,17 @@ export interface FieldDef {
   label: string;
   type?: 'text' | 'number' | 'date' | 'select' | 'textarea' | 'time' | 'checkbox';
   options?: Array<{ value: string; label: string }>;
+  /**
+   * Load select options from another table instead of hardcoding them, so a
+   * foreign key (e.g. products.category_id) can be picked in the form.
+   */
+  optionsFrom?: {
+    table: string;
+    labelColumnEn: string;
+    labelColumnAr: string;
+    /** Only offer rows where this column is not false. */
+    activeColumn?: string;
+  };
   required?: boolean;
   defaultValue?: string | number | boolean;
   hideInTable?: boolean;
@@ -70,6 +81,28 @@ export default function CrudPage({
     }, { ...(defaults ?? {}) }),
     [fields, defaults],
   );
+
+  // Resolve any `optionsFrom` foreign keys once per table+locale.
+  const dynamicSources = useMemo(() => fields.filter((f) => f.optionsFrom), [fields]);
+  const { data: dynamicOptions = {} } = useQuery({
+    queryKey: ['crud-options', table, isRtl, dynamicSources.map((f) => f.name)],
+    queryFn: async () => {
+      const result: Record<string, Array<{ value: string; label: string }>> = {};
+      await Promise.all(dynamicSources.map(async (f) => {
+        const src = f.optionsFrom!;
+        let q = supabase.from(src.table).select(`id, ${src.labelColumnEn}, ${src.labelColumnAr}`);
+        if (src.activeColumn) q = q.not(src.activeColumn, 'is', false);
+        const { data: rows } = await q.limit(300);
+        result[f.name] = (rows ?? []).map((r) => {
+          const row = r as unknown as Record<string, string>;
+          return { value: row.id, label: row[isRtl ? src.labelColumnAr : src.labelColumnEn] };
+        });
+      }));
+      return result;
+    },
+    enabled: dynamicSources.length > 0,
+    staleTime: 60_000,
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: [table, filterValues],
@@ -135,8 +168,9 @@ export default function CrudPage({
     if (f.render) return f.render(row);
     const v = row[f.name];
     if (f.type === 'checkbox') return v ? '✓' : '—';
-    if (f.type === 'select' && f.options) {
-      return f.options.find((o) => o.value === String(v))?.label ?? String(v ?? '—');
+    if (f.type === 'select' && (f.options || f.optionsFrom)) {
+      const opts = f.optionsFrom ? (dynamicOptions[f.name] ?? []) : (f.options ?? []);
+      return opts.find((o) => o.value === String(v))?.label ?? String(v ?? '—');
     }
     return v === null || v === undefined || v === '' ? '—' : String(v);
   };
@@ -231,7 +265,8 @@ export default function CrudPage({
                 <Select key={f.name} label={f.label} required={f.required} value={String(form[f.name] ?? '')}
                   onChange={(e) => setForm({ ...form, [f.name]: e.target.value })}>
                   <option value="">—</option>
-                  {f.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  {(f.optionsFrom ? (dynamicOptions[f.name] ?? []) : (f.options ?? []))
+                    .map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </Select>
               );
             }

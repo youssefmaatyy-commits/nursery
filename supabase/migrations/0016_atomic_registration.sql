@@ -100,3 +100,13 @@ grant execute on function
   public.create_child_with_guardian(uuid, jsonb, uuid, jsonb, text),
   public.nursery_calendar(uuid, date, date)
 to authenticated;
+
+-- ------------------------------------------------------- document deletion
+-- Staff could upload and read documents, but the storage policies covered only
+-- SELECT and INSERT. A mis-uploaded file could never be removed.
+create policy storage_staff_delete on storage.objects
+for delete to authenticated
+using (
+  bucket_id = any (array['child-photos','child-documents','parent-documents','invoices','expense-receipts'])
+  and (public.has_permission('documents.manage') or public.has_permission('documents.view'))
+);

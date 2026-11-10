@@ -95,6 +95,30 @@ const MESSAGES: Record<string, { ar: string; en: string }> = {
     ar: 'اسم ولي الأمر ورقم الهاتف مطلوبين.',
     en: 'The guardian needs a name and a phone number.',
   },
+  fee_required: {
+    ar: 'اختار الفصل الأول — المصاريف الشهرية بتيجي منه.',
+    en: 'Pick a classroom first — the monthly fee comes from it.',
+  },
+  child_required: {
+    ar: 'اختار الطفل.',
+    en: 'Select a child.',
+  },
+  supplier_required: {
+    ar: 'اختار المورد.',
+    en: 'Select a supplier.',
+  },
+  file_required: {
+    ar: 'اختار ملف ترفعه.',
+    en: 'Choose a file to upload.',
+  },
+  description_required: {
+    ar: 'الوصف مطلوب.',
+    en: 'A description is required.',
+  },
+  no_items: {
+    ar: 'أضف صنف واحد على الأقل.',
+    en: 'Add at least one line item.',
+  },
   guardian_required: {
     ar: 'لازم تختار ولي أمر أو تنشئ واحد جديد.',
     en: 'Pick an existing guardian or create a new one.',

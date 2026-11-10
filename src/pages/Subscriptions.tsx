@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { CalendarCheck, Plus, RefreshCw, Ban, PlayCircle } from 'lucide-react';
+import { CalendarCheck, Plus, RefreshCw, Ban, PlayCircle, History } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/Toast';
@@ -31,6 +31,25 @@ export default function Subscriptions() {
 
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState({ child_id: '', package_id: '', discount: '0' });
+  const [usageFor, setUsageFor] = useState<Sub | null>(null);
+
+  /**
+   * Usage ledger. `subscription_usage` is written by the pricing RPCs when a
+   * session is charged against a package, but nothing ever showed it — so a
+   * guardian asking "where did my 10 hours go" had no answer in the app.
+   */
+  const { data: usage, isLoading: usageLoading } = useQuery({
+    queryKey: ['subscription-usage', usageFor?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('subscription_usage')
+        .select('id, used_at, usage_type, minutes, session_id')
+        .eq('subscription_id', usageFor!.id)
+        .order('used_at', { ascending: false }).limit(200);
+      if (error) throw error;
+      return data as Array<{ id: string; used_at: string; usage_type: string; minutes: number; session_id: string | null }>;
+    },
+    enabled: Boolean(usageFor?.id),
+  });
 
   const { data: subs, isLoading } = useQuery({
     queryKey: ['subscriptions'],
@@ -144,6 +163,10 @@ export default function Subscriptions() {
                     <td className="text-end">
                       {can('subscriptions.manage') && (
                         <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => setUsageFor(s)}
+                            title={isRtl ? 'سجل الاستخدام' : 'Usage ledger'}>
+                            <History className="h-3.5 w-3.5" />
+                          </Button>
                           <Button variant="ghost" size="sm" onClick={() => renew.mutate(s.id)} title={t('subscriptions.renew')}>
                             <RefreshCw className="h-3.5 w-3.5" />
                           </Button>
@@ -195,6 +218,38 @@ export default function Subscriptions() {
             ? 'يُنشئ النظام فاتورة تلقائياً للاشتراك، ويمكن تحصيلها من صفحة الفواتير.'
             : 'An invoice is created automatically and can be collected from the invoices page.'}</p>
         </div>
+      </Modal>
+
+      <Modal open={Boolean(usageFor)} onClose={() => setUsageFor(null)} wide
+        title={isRtl ? 'سجل استخدام الاشتراك' : 'Subscription usage'}>
+        {usageLoading ? <TableSkeleton rows={4} cols={3} /> : !usage?.length ? (
+          <EmptyState title={isRtl ? 'مفيش استخدام لسه' : 'Nothing used yet'} />
+        ) : (
+          <div className="max-h-96 overflow-y-auto">
+            <table className="table">
+              <thead><tr>
+                <th>{isRtl ? 'التاريخ' : 'When'}</th>
+                <th>{isRtl ? 'النوع' : 'Type'}</th>
+                <th>{isRtl ? 'الدقايق' : 'Minutes'}</th>
+                <th>{isRtl ? 'الجلسة' : 'Session'}</th>
+              </tr></thead>
+              <tbody>
+                {usage.map((u) => (
+                  <tr key={u.id}>
+                    <td className="whitespace-nowrap text-sm text-slate-500">
+                      {formatDate(u.used_at, locale)}
+                    </td>
+                    <td><Badge tone="info">{u.usage_type}</Badge></td>
+                    <td className="tabular-nums">{u.minutes}</td>
+                    <td className="font-mono text-xs text-slate-400">
+                      {u.session_id ? u.session_id.slice(0, 8) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Modal>
     </div>
   );
