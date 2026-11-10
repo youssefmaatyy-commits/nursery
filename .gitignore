@@ -1,0 +1,25 @@
+node_modules
+dist
+dist-ssr
+build
+coverage
+.env
+.env.local
+.env.*.local
+*.local
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea
+supabase/.temp
+supabase/.branches
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.DS_Store
+test-results
+playwright-report
+
+# TypeScript incremental build info
+*.tsbuildinfo
