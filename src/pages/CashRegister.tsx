@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/Toast';
 import { Badge, Button, Card, CardHeader, EmptyState, Input, Modal, PageHeader, TableSkeleton } from '@/components/ui';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
+import { humanizeError } from '@/lib/errors';
 
 export default function CashRegister() {
   const { t, i18n } = useTranslation();
@@ -75,7 +76,7 @@ export default function CashRegister() {
       void qc.invalidateQueries({ queryKey: ['current-shift'] });
       void qc.invalidateQueries({ queryKey: ['dashboard'] });
     },
-    onError: (e: Error) => push('error', e.message),
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
   const closeShift = useMutation({
@@ -92,7 +93,7 @@ export default function CashRegister() {
       void qc.invalidateQueries({ queryKey: ['shift-history'] });
       void qc.invalidateQueries({ queryKey: ['dashboard'] });
     },
-    onError: (e: Error) => push('error', e.message),
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
   const addMovement = useMutation({
@@ -108,7 +109,7 @@ export default function CashRegister() {
       setMovement({ type: 'deposit', amount: '', description: '' });
       void qc.invalidateQueries({ queryKey: ['cash-movements'] });
     },
-    onError: (e: Error) => push('error', e.message),
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
   const cashIn = (movements ?? []).filter((m) => ['sale', 'deposit', 'float'].includes(m.movement_type)).reduce((s, m) => s + Number(m.amount), 0);

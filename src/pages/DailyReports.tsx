@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/Toast';
 import { Badge, Button, Card, EmptyState, Input, Modal, PageHeader, Select, TableSkeleton } from '@/components/ui';
 import { formatDate } from '@/lib/utils';
+import { humanizeError } from '@/lib/errors';
 
 interface ReportRow {
   id: string; report_date: string; mood: string | null; behavior: string | null;
@@ -74,7 +75,7 @@ export default function DailyReports() {
       setShowForm(false);
       void qc.invalidateQueries({ queryKey: ['daily-reports'] });
     },
-    onError: (e: Error) => push('error', e.message),
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
   return (

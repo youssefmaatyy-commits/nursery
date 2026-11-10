@@ -1,12 +1,35 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Shield, Check } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/components/ui/Toast';
+import { humanizeError } from '@/lib/errors';
 import { Badge, Card, CardHeader, EmptyState, PageHeader, TableSkeleton } from '@/components/ui';
 
 export default function Roles() {
   const { t, i18n } = useTranslation();
+  const { can } = useAuth();
+  const { push } = useToast();
+  const qc = useQueryClient();
   const isRtl = i18n.language === 'ar';
+  const locale = isRtl ? 'ar' : 'en';
+  const editable = can('roles.manage');
+
+  const setPermission = useMutation({
+    mutationFn: async ({ role, permission, enabled }: { role: string; permission: string; enabled: boolean }) => {
+      const { error } = await supabase.rpc('admin_set_role_permission', {
+        p_role_code: role, p_permission_code: permission, p_enabled: enabled,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      push('success', t('common.savedSuccessfully'));
+      void qc.invalidateQueries({ queryKey: ['roles'] });
+      void qc.invalidateQueries({ queryKey: ['permissions'] });
+    },
+    onError: (e: Error) => push('error', humanizeError(e, locale)),
+  });
 
   const { data: roles, isLoading } = useQuery({
     queryKey: ['roles'],
@@ -90,9 +113,27 @@ export default function Roles() {
                             </td>
                             {roles?.map((r) => {
                               const has = r.code === 'super_admin' || r.role_permissions.some((rp) => rp.permission_code === p.code);
+                              // super_admin bypasses has_permission() entirely, so a toggle
+                              // there would be cosmetic. Show it as always granted.
+                              const locked = r.code === 'super_admin' || !editable;
                               return (
                                 <td key={r.id} className="text-center">
-                                  {has ? <Check className="mx-auto h-4 w-4 text-emerald-600" /> : <span className="text-slate-200">—</span>}
+                                  {locked ? (
+                                    has
+                                      ? <Check className="mx-auto h-4 w-4 text-emerald-600" />
+                                      : <span className="text-slate-200">—</span>
+                                  ) : (
+                                    <input
+                                      type="checkbox"
+                                      className="h-4 w-4 cursor-pointer rounded border-slate-300 accent-brand-700"
+                                      checked={has}
+                                      disabled={setPermission.isPending}
+                                      aria-label={`${r.code} ${p.code}`}
+                                      onChange={(e) => setPermission.mutate({
+                                        role: r.code, permission: p.code, enabled: e.target.checked,
+                                      })}
+                                    />
+                                  )}
                                 </td>
                               );
                             })}
@@ -104,6 +145,11 @@ export default function Roles() {
                 </table>
               </div>
             )}
+            <p className="mt-3 px-1 text-xs text-slate-500">
+              {isRtl
+                ? 'التغييرات تُطبّق فورًا على مستوى قاعدة البيانات، والموظف يراها بعد تحديث الصفحة.'
+                : 'Changes apply immediately at the database level; staff see them on their next page load.'}
+            </p>
           </Card>
         </>
       )}

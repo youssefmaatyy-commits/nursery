@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/Toast';
 import { Alert, Badge, Button, Card, CardHeader, EmptyState, Input, PageHeader, Select } from '@/components/ui';
 import { formatCurrency, newIdempotencyKey } from '@/lib/utils';
+import { humanizeError } from '@/lib/errors';
 
 interface Product {
   id: string; sku: string; name_en: string; name_ar: string; sale_price: number; stock_qty: number; tax_rate: number;
@@ -131,7 +132,7 @@ export default function POS() {
       void qc.invalidateQueries({ queryKey: ['dashboard'] });
       void qc.invalidateQueries({ queryKey: ['invoices'] });
     },
-    onError: (e: Error) => push('error', e.message),
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
   return (

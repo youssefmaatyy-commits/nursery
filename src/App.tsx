@@ -32,14 +32,22 @@ const Sync = lazy(() => import('@/pages/Sync'));
 const ParentPortal = lazy(() => import('@/pages/ParentPortal'));
 const ResetPassword = lazy(() => import('@/pages/ResetPassword'));
 const Setup = lazy(() => import('@/pages/Setup'));
+const Staff = lazy(() => import('@/pages/Staff'));
+const Calendar = lazy(() => import('@/pages/Calendar'));
+const Purchases = lazy(() => import('@/pages/Purchases'));
+const Documents = lazy(() => import('@/pages/Documents'));
+const Attendance = lazy(() => import('@/pages/Attendance'));
+const Categories = lazy(() => import('@/pages/Categories'));
+const ChangePassword = lazy(() => import('@/pages/ChangePassword'));
 
 function Loading() {
   return <Card><TableSkeleton rows={6} cols={4} /></Card>;
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useAuth();
-  const { t } = useTranslation();
+  const { session, loading, context } = useAuth();
+  const { t, i18n } = useTranslation();
+  const isRtl = i18n.language === 'ar';
   if (loading) {
     return (
       <div className="grid min-h-dvh place-items-center bg-slate-50">
@@ -51,6 +59,38 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
     );
   }
   if (!session) return <Navigate to="/login" replace />;
+
+  // A brand-new staff account must replace the temporary password before it can
+  // do anything. Previously this was only a sentence on the login screen.
+  if (context?.profile?.must_change_password) {
+    return (
+      <div className="min-h-dvh bg-slate-50">
+        <ChangePassword forced />
+      </div>
+    );
+  }
+
+  // An account with no branch cannot pass can_access_branch(), so every RPC would
+  // fail with a bare 'branch_forbidden'. Explain it instead of showing that.
+  if (context && context.branches.length === 0 && !context.is_parent) {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-slate-50 p-4">
+        <div className="max-w-lg">
+          <Card className="p-6 text-center">
+            <p className="mb-2 text-lg font-semibold text-slate-900">
+              {isRtl ? 'حسابك مش مربوط بفرع' : 'Your account has no branch'}
+            </p>
+            <p className="text-sm leading-relaxed text-slate-500">
+              {isRtl
+                ? 'الحساب اتعمل لكن لسه مفيش له فرع أو دور، فالنظام بيمنع كل العمليات. كلّم مدير النظام يربط حسابك بفرع ويديك دور.'
+                : 'The account exists but has no branch or role assigned, so every operation is blocked. Ask an administrator to assign a branch and a role.'}
+            </p>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   return <>{children}</>;
 }
 
@@ -85,6 +125,13 @@ export default function App() {
           <Route path="/inventory" element={<Inventory />} />
           <Route path="/suppliers" element={<Suppliers />} />
           <Route path="/employees" element={<Employees />} />
+          <Route path="/staff" element={<Staff />} />
+          <Route path="/calendar" element={<Calendar />} />
+          <Route path="/purchases" element={<Purchases />} />
+          <Route path="/documents" element={<Documents />} />
+          <Route path="/attendance" element={<Attendance />} />
+          <Route path="/categories" element={<Categories />} />
+          <Route path="/change-password" element={<ChangePassword />} />
           <Route path="/roles" element={<Roles />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/audit" element={<AuditLog />} />

@@ -5,12 +5,37 @@ import { Plus, Search } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/Toast';
 import { Button, Card, EmptyState, Input, Modal, PageHeader, Select, TableSkeleton } from '@/components/ui';
+import { humanizeError } from '@/lib/errors';
+
+/** Optional row actions, e.g. archive/delete, implemented as database RPCs. */
+export interface RowAction {
+  key: string;
+  label: string;
+  icon?: ReactNode;
+  /** Only show this action when true. */
+  visible?: (row: Record<string, unknown>) => boolean;
+  /** Return the rpc name plus its arguments. */
+  rpc: (row: Record<string, unknown>) => { fn: string; args: Record<string, unknown> };
+  confirm?: string;
+  tone?: 'default' | 'danger';
+}
 
 export interface FieldDef {
   name: string;
   label: string;
   type?: 'text' | 'number' | 'date' | 'select' | 'textarea' | 'time' | 'checkbox';
   options?: Array<{ value: string; label: string }>;
+  /**
+   * Load select options from another table instead of hardcoding them, so a
+   * foreign key (e.g. products.category_id) can be picked in the form.
+   */
+  optionsFrom?: {
+    table: string;
+    labelColumnEn: string;
+    labelColumnAr: string;
+    /** Only offer rows where this column is not false. */
+    activeColumn?: string;
+  };
   required?: boolean;
   defaultValue?: string | number | boolean;
   hideInTable?: boolean;
@@ -32,16 +57,18 @@ export interface CrudPageProps {
   onRowClick?: (row: Record<string, unknown>) => void;
   defaults?: Record<string, unknown>;
   transformOnSave?: (values: Record<string, unknown>) => Record<string, unknown>;
+  rowActions?: RowAction[];
 }
 
 export default function CrudPage({
   title, subtitle, table, select = '*', orderBy, fields, filters, searchColumns = [],
-  canCreate, canEdit, extraActions, onRowClick, defaults, transformOnSave,
+  canCreate, canEdit, extraActions, onRowClick, defaults, transformOnSave, rowActions = [],
 }: CrudPageProps) {
   const { t, i18n } = useTranslation();
   const { push } = useToast();
   const qc = useQueryClient();
   const isRtl = i18n.language === 'ar';
+  const locale = isRtl ? 'ar' : 'en';
   const [search, setSearch] = useState('');
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<Record<string, unknown> | null>(null);
@@ -54,6 +81,28 @@ export default function CrudPage({
     }, { ...(defaults ?? {}) }),
     [fields, defaults],
   );
+
+  // Resolve any `optionsFrom` foreign keys once per table+locale.
+  const dynamicSources = useMemo(() => fields.filter((f) => f.optionsFrom), [fields]);
+  const { data: dynamicOptions = {} } = useQuery({
+    queryKey: ['crud-options', table, isRtl, dynamicSources.map((f) => f.name)],
+    queryFn: async () => {
+      const result: Record<string, Array<{ value: string; label: string }>> = {};
+      await Promise.all(dynamicSources.map(async (f) => {
+        const src = f.optionsFrom!;
+        let q = supabase.from(src.table).select(`id, ${src.labelColumnEn}, ${src.labelColumnAr}`);
+        if (src.activeColumn) q = q.not(src.activeColumn, 'is', false);
+        const { data: rows } = await q.limit(300);
+        result[f.name] = (rows ?? []).map((r) => {
+          const row = r as unknown as Record<string, string>;
+          return { value: row.id, label: row[isRtl ? src.labelColumnAr : src.labelColumnEn] };
+        });
+      }));
+      return result;
+    },
+    enabled: dynamicSources.length > 0,
+    staleTime: 60_000,
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: [table, filterValues],
@@ -71,8 +120,15 @@ export default function CrudPage({
     mutationFn: async () => {
       let payload = { ...form };
       if (transformOnSave) payload = transformOnSave(payload);
-      if (editing) {
-        const { error } = await supabase.from(table).update(payload).eq('id', editing.id as string);
+
+      // New records are opened with `editing = {}` (so the modal renders) which has
+      // no id. This branch used to run for those too, sending
+      // `.eq('id', undefined)` → Postgres rejects it with
+      // "invalid input syntax for type uuid: undefined". Only update when a real
+      // id is present; otherwise insert.
+      const id = typeof editing?.id === 'string' && editing.id ? editing.id : null;
+      if (id) {
+        const { error } = await supabase.from(table).update(payload).eq('id', id);
         if (error) throw error;
       } else {
         const { error } = await supabase.from(table).insert(payload);
@@ -85,6 +141,18 @@ export default function CrudPage({
       void qc.invalidateQueries({ queryKey: [table] });
     },
     onError: (e: Error) => push('error', e.message),
+  });
+
+  const runAction = useMutation({
+    mutationFn: async ({ fn, args }: { fn: string; args: Record<string, unknown> }) => {
+      const { error } = await supabase.rpc(fn, args);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      push('success', t('common.savedSuccessfully'));
+      void qc.invalidateQueries({ queryKey: [table] });
+    },
+    onError: (e: Error) => push('error', humanizeError(e, locale)),
   });
 
   const rows = useMemo(() => {
@@ -100,8 +168,9 @@ export default function CrudPage({
     if (f.render) return f.render(row);
     const v = row[f.name];
     if (f.type === 'checkbox') return v ? '✓' : '—';
-    if (f.type === 'select' && f.options) {
-      return f.options.find((o) => o.value === String(v))?.label ?? String(v ?? '—');
+    if (f.type === 'select' && (f.options || f.optionsFrom)) {
+      const opts = f.optionsFrom ? (dynamicOptions[f.name] ?? []) : (f.options ?? []);
+      return opts.find((o) => o.value === String(v))?.label ?? String(v ?? '—');
     }
     return v === null || v === undefined || v === '' ? '—' : String(v);
   };
@@ -143,7 +212,7 @@ export default function CrudPage({
             <thead>
               <tr>
                 {visibleFields.map((f) => <th key={f.name}>{f.label}</th>)}
-                {canEdit && <th className="text-end">{t('common.actions')}</th>}
+                {(canEdit || rowActions.length > 0) && <th className="text-end">{t('common.actions')}</th>}
               </tr>
             </thead>
             <tbody>
@@ -151,8 +220,20 @@ export default function CrudPage({
                 <tr key={String(row.id)} className={onRowClick ? 'cursor-pointer' : undefined}
                   onClick={() => onRowClick?.(row)}>
                   {visibleFields.map((f) => <td key={f.name}>{renderCell(f, row)}</td>)}
-                  {canEdit && (
+                  {(canEdit || rowActions.length > 0) && (
                     <td className="text-end">
+                      {rowActions.filter((a) => !a.visible || a.visible(row)).map((a) => (
+                        <Button key={a.key} variant="ghost" size="sm" title={a.label}
+                          className={a.tone === 'danger' ? 'text-rose-600 hover:text-rose-700' : undefined}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (a.confirm && !window.confirm(a.confirm)) return;
+                            runAction.mutate(a.rpc(row));
+                          }}>
+                          {a.icon ?? a.label}
+                        </Button>
+                      ))}
+                      {canEdit && (
                       <Button variant="ghost" size="sm" onClick={(e) => {
                         e.stopPropagation();
                         setEditing(row);
@@ -161,6 +242,7 @@ export default function CrudPage({
                           return acc;
                         }, {}));
                       }}>{t('common.edit')}</Button>
+                      )}
                     </td>
                   )}
                 </tr>
@@ -183,7 +265,8 @@ export default function CrudPage({
                 <Select key={f.name} label={f.label} required={f.required} value={String(form[f.name] ?? '')}
                   onChange={(e) => setForm({ ...form, [f.name]: e.target.value })}>
                   <option value="">—</option>
-                  {f.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  {(f.optionsFrom ? (dynamicOptions[f.name] ?? []) : (f.options ?? []))
+                    .map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </Select>
               );
             }

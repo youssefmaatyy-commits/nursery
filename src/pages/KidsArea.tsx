@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/Toast';
 import { Badge, Button, Card, CardHeader, EmptyState, Input, PageHeader, TableSkeleton } from '@/components/ui';
 import { formatCurrency, formatDateTime, minutesToHuman } from '@/lib/utils';
+import { humanizeError } from '@/lib/errors';
 
 interface Rule {
   id: string; name_en: string; name_ar: string; rule_type: string; price: number;
@@ -57,7 +58,7 @@ export default function KidsArea() {
       return data as Record<string, unknown>;
     },
     onSuccess: (d) => setQuote(d),
-    onError: (e: Error) => push('error', e.message),
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
   return (

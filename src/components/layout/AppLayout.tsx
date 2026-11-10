@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, Baby, DoorOpen, Blocks, School, GraduationCap, CalendarCheck,
   ClipboardList, CreditCard, Receipt, Wallet, TrendingDown, Package, Truck, UserCog, Shield,
   Bell, Settings, ScrollText, BarChart3, LogOut, Menu, X, Wifi, WifiOff, Languages,
-  RefreshCw, Search, ChevronDown, Heart,
+  RefreshCw, Search, ChevronDown, Heart, CalendarDays, KeyRound, FileUp, ShoppingCart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -45,6 +45,9 @@ export default function AppLayout() {
         { to: '/nursery', label: t('nav.nursery'), icon: <School className="h-4.5 w-4.5" />, permission: ['nursery.view', 'nursery.operate'] },
         { to: '/classrooms', label: t('nav.classrooms'), icon: <GraduationCap className="h-4.5 w-4.5" />, permission: ['nursery.view', 'nursery.manage_classes'] },
         { to: '/daily-reports', label: t('nav.dailyReports'), icon: <ClipboardList className="h-4.5 w-4.5" />, permission: 'nursery.reports' },
+        { to: '/calendar', label: isRtl ? 'التقويم والإجازات' : 'Calendar', icon: <CalendarDays className="h-4.5 w-4.5" />, permission: ['nursery.view', 'nursery.manage_classes'] },
+        { to: '/documents', label: isRtl ? 'المستندات' : 'Documents', icon: <FileUp className="h-4.5 w-4.5" />, permission: 'documents.view' },
+        { to: '/attendance', label: isRtl ? 'حضور الموظفين' : 'Staff attendance', icon: <CalendarCheck className="h-4.5 w-4.5" />, permission: ['hr.view', 'hr.manage', 'employees.view'] },
         { to: '/subscriptions', label: t('nav.subscriptions'), icon: <CalendarCheck className="h-4.5 w-4.5" />, permission: ['subscriptions.view', 'subscriptions.manage'] },
       ],
     },
@@ -61,15 +64,18 @@ export default function AppLayout() {
       id: 'admin', title: 'nav.sections.admin',
       items: [
         { to: '/inventory', label: t('nav.inventory'), icon: <Package className="h-4.5 w-4.5" />, permission: 'inventory.view' },
+        { to: '/categories', label: isRtl ? 'التصنيفات' : 'Categories', icon: <Blocks className="h-4.5 w-4.5" />, permission: 'inventory.view' },
+        { to: '/purchases', label: isRtl ? 'المشتريات' : 'Purchases', icon: <ShoppingCart className="h-4.5 w-4.5" />, permission: 'inventory.view' },
         { to: '/suppliers', label: t('nav.suppliers'), icon: <Truck className="h-4.5 w-4.5" />, permission: 'inventory.view' },
         { to: '/employees', label: t('nav.employees'), icon: <UserCog className="h-4.5 w-4.5" />, permission: 'employees.view' },
+        { to: '/staff', label: isRtl ? 'الموظفين والحسابات' : 'Staff & accounts', icon: <Users className="h-4.5 w-4.5" />, permission: ['employees.manage', 'roles.manage'] },
         { to: '/roles', label: t('nav.roles'), icon: <Shield className="h-4.5 w-4.5" />, permission: 'roles.manage' },
         { to: '/audit', label: t('nav.audit'), icon: <ScrollText className="h-4.5 w-4.5" />, permission: 'audit.view' },
         { to: '/reports', label: t('nav.reports'), icon: <BarChart3 className="h-4.5 w-4.5" />, permission: 'reports.view' },
         { to: '/settings', label: t('nav.settings'), icon: <Settings className="h-4.5 w-4.5" />, permission: 'settings.manage' },
       ],
     },
-  ], [t]);
+  ], [t, isRtl]);
 
   const displayName = isRtl
     ? context?.profile?.full_name_ar || context?.profile?.full_name_en || context?.profile?.email
@@ -204,6 +210,10 @@ export default function AppLayout() {
                       <button onClick={() => { setUserMenu(false); navigate('/notifications'); }}
                         className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50">
                         <Bell className="h-4 w-4" /> {t('common.notifications')}
+                      </button>
+                      <button onClick={() => { setUserMenu(false); navigate('/change-password'); }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50">
+                        <KeyRound className="h-4 w-4" /> {isRtl ? 'تغيير كلمة المرور' : 'Change password'}
                       </button>
                       <button onClick={() => { setUserMenu(false); navigate('/sync'); }}
                         className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50">

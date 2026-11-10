@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/Toast';
 import { Badge, Button, Card, CardHeader, EmptyState, Input, Modal, PageHeader, TableSkeleton } from '@/components/ui';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
+import { humanizeError } from '@/lib/errors';
 
 export default function ParentPortal() {
   const { t, i18n } = useTranslation();
@@ -82,7 +83,7 @@ export default function ParentPortal() {
       setShowAbsence(false);
       setAbsence({ date: new Date().toISOString().slice(0, 10), reason: '' });
     },
-    onError: (e: Error) => push('error', e.message),
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
   const outstanding = (invoices ?? []).reduce((s, i) => s + Number(i.balance), 0);

@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Phone, ShieldAlert, FileText, Plus, Users, Clock, Receipt } from 'lucide-react';
+import { ArrowLeft, Phone, ShieldAlert, FileText, Plus, Users, Clock, Receipt, Link2, Unlink } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/Toast';
-import { Alert, Badge, Button, Card, CardHeader, EmptyState, Input, Modal, PageHeader, TableSkeleton } from '@/components/ui';
+import { Alert, Badge, Button, Card, CardHeader, EmptyState, Input, Modal, PageHeader, Select, TableSkeleton } from '@/components/ui';
 import { ageFromDob, formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
+import { humanizeError } from '@/lib/errors';
 
 export default function ChildDetail() {
   const { id } = useParams<{ id: string }>();
@@ -19,6 +20,11 @@ export default function ChildDetail() {
   const isRtl = i18n.language === 'ar';
   const locale = isRtl ? 'ar-EG' : 'en-US';
   const [showPickup, setShowPickup] = useState(false);
+  const [showGuardian, setShowGuardian] = useState(false);
+  const [guardianForm, setGuardianForm] = useState({
+    parent_id: '', relation: 'father', is_primary: false,
+    can_pickup: true, financial_responsible: false,
+  });
   const [pickup, setPickup] = useState({ nameEn: '', nameAr: '', relation: '', phone: '' });
 
   const { data: child, isLoading } = useQuery({
@@ -80,6 +86,54 @@ export default function ChildDetail() {
     enabled: Boolean(id),
   });
 
+  const { data: parentOptions } = useQuery({
+    queryKey: ['parent-options-all', child?.branch_id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('parents')
+        .select('id, full_name_en, full_name_ar, phone')
+        .eq('status', 'active').order('full_name_en').limit(500);
+      if (error) throw error;
+      return data as Array<{ id: string; full_name_en: string; full_name_ar: string; phone: string }>;
+    },
+    enabled: showGuardian && Boolean(child),
+  });
+
+  const linkGuardian = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc('child_guardian_upsert', {
+        p_child: id, p_parent: guardianForm.parent_id,
+        p_relation: guardianForm.relation,
+        p_is_primary: guardianForm.is_primary,
+        p_can_pickup: guardianForm.can_pickup,
+        p_financial_responsible: guardianForm.financial_responsible,
+        p_custody_notes: null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      push('success', t('common.savedSuccessfully'));
+      setShowGuardian(false);
+      setGuardianForm({
+        parent_id: '', relation: 'father', is_primary: false,
+        can_pickup: true, financial_responsible: false,
+      });
+      void qc.invalidateQueries({ queryKey: ['child-guardians', id] });
+    },
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
+  });
+
+  const unlinkGuardian = useMutation({
+    mutationFn: async (linkId: string) => {
+      const { error } = await supabase.rpc('child_guardian_unlink', { p_link: linkId });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      push('success', t('common.savedSuccessfully'));
+      void qc.invalidateQueries({ queryKey: ['child-guardians', id] });
+    },
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
+  });
+
   const addPickup = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from('authorized_pickups').insert({
@@ -123,7 +177,9 @@ export default function ChildDetail() {
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader title={t('children.guardians')} action={can('parents.manage') && (
-            <Link to="/parents"><Button variant="secondary" size="sm">{t('parents.add')}</Button></Link>
+            <Button variant="secondary" size="sm" onClick={() => setShowGuardian(true)}>
+              <Link2 className="h-3.5 w-3.5" /> {t('parents.add')}
+            </Button>
           )} />
           {!guardians?.length ? <EmptyState title={t('common.noData')} icon={<Users className="h-6 w-6" />} /> : (
             <ul className="divide-y divide-slate-100">
@@ -144,6 +200,13 @@ export default function ChildDetail() {
                   <a href={`tel:${g.parents?.phone}`} className="inline-flex items-center gap-1 text-xs text-brand-700 hover:underline">
                     <Phone className="h-3.5 w-3.5" /> {g.parents?.phone}
                   </a>
+                  {can('parents.manage') && (
+                    <Button variant="ghost" size="sm" title={isRtl ? 'فصل الربط' : 'Unlink guardian'}
+                      loading={unlinkGuardian.isPending}
+                      onClick={() => unlinkGuardian.mutate(g.id)}>
+                      <Unlink className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -231,12 +294,61 @@ export default function ChildDetail() {
               {isRtl ? 'المستندات مخزنة في مخزن خاص ولا يمكن الوصول إليها إلا للمصرح لهم.'
                 : 'Documents are stored in a private bucket, accessible only to authorized staff.'}
             </p>
-            <Link to="/operations"><Button variant="secondary" size="sm" className="mt-3 w-full">
+            <Link to={`/documents?child=${id}`}><Button variant="secondary" size="sm" className="mt-3 w-full">
               {isRtl ? 'إدارة المستندات' : 'Manage documents'}
             </Button></Link>
           </Card>
         </div>
       </div>
+
+      <Modal open={showGuardian} onClose={() => setShowGuardian(false)}
+        title={isRtl ? 'إضافة ولي أمر' : 'Add a guardian'}
+        footer={<>
+          <Button variant="secondary" onClick={() => setShowGuardian(false)}>{t('common.cancel')}</Button>
+          <Button loading={linkGuardian.isPending} disabled={!guardianForm.parent_id}
+            onClick={() => linkGuardian.mutate()}>{t('common.save')}</Button>
+        </>}>
+        <div className="space-y-3">
+          <Select label={isRtl ? 'ولي الأمر' : 'Guardian'} required value={guardianForm.parent_id}
+            onChange={(e) => setGuardianForm({ ...guardianForm, parent_id: e.target.value })}>
+            <option value="">—</option>
+            {parentOptions?.filter((p) => !guardians?.some((g) => g.parents?.id === p.id)).map((p) => (
+              <option key={p.id} value={p.id}>
+                {isRtl ? p.full_name_ar : p.full_name_en} · {p.phone}
+              </option>
+            ))}
+          </Select>
+
+          <Select label={isRtl ? 'صلة القرابة' : 'Relationship'} value={guardianForm.relation}
+            onChange={(e) => setGuardianForm({ ...guardianForm, relation: e.target.value })}>
+            <option value="father">{t('children.father')}</option>
+            <option value="mother">{t('children.mother')}</option>
+            <option value="guardian">{t('children.guardianRel')}</option>
+            <option value="other">{isRtl ? 'أخرى' : 'Other'}</option>
+          </Select>
+
+          <div className="space-y-2 rounded-xl bg-slate-50 p-3">
+            {([
+              ['is_primary', isRtl ? 'ولي الأمر الأساسي' : 'Primary guardian'],
+              ['can_pickup', isRtl ? 'مسموح له يستلم الطفل' : 'Allowed to pick up'],
+              ['financial_responsible', isRtl ? 'مسؤول ماليًا' : 'Financially responsible'],
+            ] as const).map(([key, label]) => (
+              <label key={key} className="flex items-center gap-2 text-sm">
+                <input type="checkbox" className="h-4 w-4 rounded border-slate-300 accent-brand-700"
+                  checked={guardianForm[key]}
+                  onChange={(e) => setGuardianForm({ ...guardianForm, [key]: e.target.checked })} />
+                {label}
+              </label>
+            ))}
+          </div>
+
+          <p className="text-xs text-slate-500">
+            {isRtl
+              ? 'لازم يفضل للطفل ولي أمر واحد على الأقل في كل وقت.'
+              : 'A child must always keep at least one guardian.'}
+          </p>
+        </div>
+      </Modal>
 
       <Modal open={showPickup} onClose={() => setShowPickup(false)} title={t('children.authorizedPickups')}
         footer={<>

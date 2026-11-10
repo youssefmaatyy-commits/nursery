@@ -241,3 +241,197 @@ server-only block).
    and low-stock/overdue notifications.
 6. Add the Playwright E2E suite on a machine with browser access; wire an
    Edge Function for WhatsApp/SMS absence reminders.
+
+## 5c. Staff accounts & role permissions (migration 0014)
+
+Before 0014 the system had **no way to create a user account**. `employees` rows
+existed with a `profile_id` column, but nothing in `src/` ever called
+`auth.users`, `user_roles` or any invite flow — so "adding an employee" produced
+an HR record that could not log in.
+
+`0014_staff_accounts.sql` adds seven SECURITY DEFINER RPCs. All are gated and
+audited; the browser never needs a service-role key.
+
+| RPC | Permission gate | Notes |
+| --- | --- | --- |
+| `admin_list_staff_accounts()` | `employees.manage` or `roles.manage` | profiles ⋈ auth.users ⋈ employees, roles as JSON |
+| `admin_create_staff_account(...)` | `employees.manage` | creates auth user + identity + profile + role (+ employee row) |
+| `admin_set_user_role(user, role_code, branch)` | `roles.manage` | super_admin only by a super admin |
+| `admin_remove_user_role(user, role_id)` | `roles.manage` | refuses to remove the last super admin |
+| `admin_set_user_active(user, active)` | `employees.manage` | `profiles.is_active` is what `has_permission()` checks |
+| `admin_reset_user_password(user, password)` | `employees.manage` | min 12 chars |
+| `admin_set_role_permission(role, perm, enabled)` | `roles.manage` | super_admin not editable (it bypasses the check) |
+
+### Two traps found while building this
+
+1. **`gen_salt()` / `crypt()` live in the `extensions` schema**, not `public`.
+   A function with `set search_path = public` fails with
+   `42883: function gen_salt(unknown, integer) does not exist`. Use
+   `set search_path = public, extensions` and qualify the calls.
+2. **`profiles.email` is `citext`.** A `RETURNS TABLE (... email text ...)`
+   function must cast (`p.email::text`) or it raises
+   `42804: structure of query does not match function result type`.
+
+## 5d. Guardians, deletion, and forced password change (migration 0015)
+
+### Multiple guardians per child
+`child_guardians` was already a many-to-many table, but the UI could only ever
+write **one** row — created inline when a child was registered. `ChildDetail`
+showed the guardians and then linked to `/parents`, which did not attach anything.
+
+- `child_guardian_upsert(...)` — attaches or edits a guardian. Promoting one to
+  primary demotes the rest, so exactly one primary can exist.
+- `child_guardian_unlink(link)` — refuses with
+  `child_needs_at_least_one_guardian` if it would leave a child with nobody.
+- `ChildDetail` now has a real "add guardian" modal and an unlink button per row.
+
+### Deleting a child or a parent
+Seven tables reference `children` **without** `ON DELETE CASCADE` (invoices,
+subscriptions, kids area sessions, nursery attendance, enrolments, daily
+reports, subscription usage), so a hard delete either fails or would orphan
+financial history. The rule is enforced in the database, not the UI:
+
+| Action | Behaviour |
+| --- | --- |
+| Archive child | `status = 'archived'`; keeps all history. Restorable. |
+| Hard-delete child | super admin only; **refused** with the blocking counts if any history exists |
+| Deactivate parent | `status = 'inactive'`; disappears from pickers, keeps invoices |
+| Hard-delete parent | super admin only; refused if linked to children or invoices |
+
+`child_history_counts()` returns the counts so the UI can explain the refusal
+instead of failing silently.
+
+Verified live: `admin_delete_child(..., hard => true)` on a child with 2
+invoices + 1 subscription + 2 sessions returned
+`has_history_use_archive: {"invoices": 2, "subscriptions": 1, ...}`; the archive
+path succeeded; `admin_delete_parent(hard)` on a linked parent returned
+`parent_has_children_unlink_first`; `child_guardian_unlink` on a child's only
+guardian returned `child_needs_at_least_one_guardian`.
+
+### Forced first-login password change
+`Login.tsx` used to print "the bootstrap password must be changed on first
+sign-in" while **nothing enforced it**. Now:
+
+- `profiles.must_change_password` exists; `admin_create_staff_account()` sets it.
+- `change_own_password(text)` (SECURITY DEFINER) rotates the password and clears
+  the flag for the caller — no service-role key needed in the browser.
+- `RequireAuth` renders `<ChangePassword forced />` instead of the app whenever
+  the flag is set, so a temporary password cannot be kept in use.
+
+Verified live: a new account came back with `must_change_password = true` and
+`my_context()` exposed it; calling `change_own_password` flipped it to `false`.
+
+### No more raw database codes in the UI
+20 call sites showed `e.message` verbatim — which is why a super admin without a
+branch saw the bare word `branch_forbidden` as the whole page. They now go
+through `humanizeError()`, which maps ~22 stable codes to AR/EN sentences and
+expands `has_history_use_archive` into readable counts. `RequireAuth` also shows
+an explanatory screen instead of the raw error when an account has no branch.
+
+A unit test caught a real ordering bug here: `'forbidden'` is a substring of
+`'branch_forbidden'`, so the map matched the wrong message. The lookup now sorts
+candidates longest-first — see `tests/errors.test.ts`.
+
+### Admin UI added
+- **`/staff`** — list every account with its roles; create a staff account
+  (email, temporary password, role, employee code, job, salary); add/remove a
+  role; reset a password; activate/deactivate.
+- **`/roles`** — the permission matrix is now interactive. `super_admin` is shown
+  as always-granted and is not editable (it short-circuits `has_permission`).
+
+## 5e. Atomic registration, calendar, self-service password (migration 0016)
+
+### Child registration was not atomic (real defect)
+`createChild()` did three sequential PostgREST inserts — parent, then child, then
+`child_guardians`. PostgREST calls are separate transactions, so if the third one
+failed the branch was left with an **orphan parent** and a **child with no
+guardian**, and that child could never be scheduled or checked out.
+
+`create_child_with_guardian(p_branch, p_child, p_parent_id, p_new_parent,
+p_relation)` replaces it with a single SECURITY DEFINER call: create or resolve
+the guardian, insert the child, link the guardian, write the audit row — or roll
+everything back.
+
+Verified live: creating a child without `date_of_birth` now raises
+`child_name_and_dob_required` and leaves **0** rows in `parents`; the old code
+left the parent behind.
+
+### Gaps found by walking the schema, now closed
+| Gap | Resolution |
+| --- | --- |
+| `holidays`, `events`, `activities` had no UI since migration 0003 | `/calendar` screen + `nursery_calendar(branch, from, to)` |
+| A normal user had **no way to change their own password** (`/change-password` was only reachable through the forced-change gate) | added to the user menu |
+
+### Write paths exercised against the live database
+Not inferred from reading code — each was called and the result compared:
+
+| Path | Result |
+| --- | --- |
+| `create_invoice` | `INV-001012`, total 50, balance 50 |
+| `record_payment` | invoice → `paid`, paid 50, balance 0 |
+| `refund_payment` | → `partially_paid`, paid 0, balance 50 (ledger reconciles) |
+| `create_invoice` replayed with the same idempotency key | returned the original invoice with `idempotent_replay: true` — no double charge |
+| `open_shift` / `close_shift` | shift closed, counted 50 vs expected 100, difference −50 |
+| `check_in_child` / `check_out_nursery` | nursery attendance created, then closed with a timestamp |
+| `create_subscription` | 800 EGP, ends 2027-02-07 |
+| `quote_kids_area` (90 min) | 80 billable minutes → 120 EGP, straight from the pricing rule |
+| RLS audit | all 49 public tables have RLS enabled and ≥1 policy |
+
+### Still genuinely absent
+`child_documents`, `medical_notes`, and file uploads (`uploaded_files`,
+storage buckets) have tables and RLS but no screen. Documents need a storage
+policy review that is out of scope for this pass; flagged rather than faked.
+
+## 5f. Remaining schema gaps closed
+
+A table-vs-screen audit after 0016 still found these reachable only by SQL. All
+are now in the app.
+
+| Area | Where it lives now |
+| --- | --- |
+| `purchases`, `purchase_items`, `inventory_movements` | `/purchases` |
+| `product_categories` | `/categories`, and products pick one via a real dropdown |
+| `child_documents`, `medical_notes`, private storage | `/documents` |
+| `employee_attendance` | `/attendance` |
+| `classroom_teachers` | Nursery → *Classroom teachers* |
+| `subscription_usage` | Subscriptions → usage ledger (clock icon) |
+
+`refunds` and `user_roles` need no separate screen: refunds are written by
+`refund_payment` and shown inline in `/invoices`, and roles are managed through
+the `admin_set_user_role` RPCs on `/staff` and `/roles`.
+
+### Currency literal found and removed (policy violation)
+`Nursery.tsx` defaulted the enrollment fee to `'2500'`. Anyone who did not edit
+that field created an enrollment at 2500 regardless of the classroom's actual
+`monthly_fee`. Fixed:
+- the field starts empty and is filled from the selected classroom,
+- saving is refused (`fee_required`) while it is empty — `Number('')` is 0 and
+  would otherwise have persisted a **free** enrollment,
+- `tests/pricing-policy.test.ts` now scans `src/` and fails if any money field is
+  defaulted to a numeric literal. Confirmed it fails on the old code.
+
+### Storage policy gap
+Staff could upload and read documents but not delete them — the storage policies
+covered SELECT and INSERT only, so a wrong upload was permanent. Added
+`storage_staff_delete` in 0016.
+
+### Verified live for this batch
+Created a category, a purchase order with a line item (database generated
+`line_total` 150), and the matching `inventory_movements` row; then deleted all
+three and confirmed the pre-existing demo data was untouched.
+
+## 5g. Honest remaining limitations
+
+- **No browser E2E.** Chromium cannot be downloaded in this sandbox, so the
+  screens are verified by typecheck, lint, unit tests and the build, plus direct
+  calls to every RPC and table they use. Nobody has clicked through the UI.
+- **The deployed preview is behind Vercel Authentication**, so it returns a login
+  redirect to any unauthenticated fetch. Turning that off is a dashboard setting
+  only the account owner can change.
+- **`RLS probe` is skipped in CI** because it needs live database credentials that
+  are intentionally not in the repo; it was run manually against
+  `wpprnexfdzteeqkmqhir` instead (all 49 public tables have RLS + a policy).
+- **Offline sync** is implemented and journaled in `sync_operations`, but real
+  multi-device conflict scenarios have not been exercised.
+- **Parent portal** is read-only by design and covers attendance, invoices,
+  reports and subscriptions. It does not let a guardian pay online.

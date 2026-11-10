@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Baby, Plus, Search, QrCode, Phone, UserPlus, Archive } from 'lucide-react';
+import { Baby, Plus, Search, QrCode, Phone, UserPlus, Archive, RotateCcw, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { humanizeError } from '@/lib/errors';
 import { useToast } from '@/components/ui/Toast';
 import {
   Alert, Badge, Button, Card, EmptyState, Input, Modal, PageHeader, Select, TableSkeleton, Textarea,
@@ -63,41 +64,35 @@ export default function Children() {
     enabled: showForm,
   });
 
+  // Registration is one SECURITY DEFINER call. It used to be three sequential
+  // inserts (parent -> child -> guardian) with no transaction across them, so a
+  // failure on the last one left an orphan parent and a child with no guardian.
   const createChild = useMutation({
     mutationFn: async () => {
-      if (!branchId) throw new Error('No branch');
-      const client = supabase;
-      let parentId = form.parent_id;
-
-      if (form.parent_mode === 'new') {
-        const { data: newParent, error: pErr } = await client.from('parents').insert({
-          full_name_en: form.parent_name_en, full_name_ar: form.parent_name_ar,
-          phone: form.parent_phone, branch_id: branchId,
-        }).select('id').single();
-        if (pErr) throw pErr;
-        parentId = newParent.id;
-      }
-      if (!parentId) throw new Error('guardian_required');
-
-      const { data: child, error: cErr } = await client.from('children').insert({
-        branch_id: branchId,
-        full_name_en: form.full_name_en, full_name_ar: form.full_name_ar,
-        date_of_birth: form.date_of_birth, gender: form.gender,
-        allergies: form.allergies || null, medical_notes: form.medical_notes || null,
-        special_care: form.special_care || null,
-        emergency_contact_name: form.emergency_contact_name || null,
-        emergency_contact_phone: form.emergency_contact_phone || null,
-        created_by: context?.user_id,
-      }).select('id').single();
-      if (cErr) throw cErr;
-
-      const { error: lErr } = await client.from('child_guardians').insert({
-        child_id: child.id, parent_id: parentId,
-        relation: form.parent_mode === 'new' ? form.parent_relation : 'guardian',
-        is_primary: true, can_pickup: true, financial_responsible: true,
+      if (!branchId) throw new Error('branch_required');
+      const { data, error } = await supabase.rpc('create_child_with_guardian', {
+        p_branch: branchId,
+        p_child: {
+          full_name_en: form.full_name_en,
+          full_name_ar: form.full_name_ar,
+          date_of_birth: form.date_of_birth,
+          gender: form.gender,
+          allergies: form.allergies,
+          medical_notes: form.medical_notes,
+          special_care: form.special_care,
+          emergency_contact_name: form.emergency_contact_name,
+          emergency_contact_phone: form.emergency_contact_phone,
+        },
+        p_parent_id: form.parent_mode === 'existing' ? form.parent_id : null,
+        p_new_parent: form.parent_mode === 'new' ? {
+          full_name_en: form.parent_name_en,
+          full_name_ar: form.parent_name_ar,
+          phone: form.parent_phone,
+        } : null,
+        p_relation: form.parent_relation,
       });
-      if (lErr) throw lErr;
-      return child;
+      if (error) throw error;
+      return data as unknown as { child_id: string; child_code: string };
     },
     onSuccess: () => {
       push('success', t('common.savedSuccessfully'));
@@ -107,19 +102,29 @@ export default function Children() {
       void qc.invalidateQueries({ queryKey: ['children'] });
       void qc.invalidateQueries({ queryKey: ['dashboard'] });
     },
-    onError: (e: Error) => push('error', e.message),
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
-  const archiveChild = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from('children').update({ status: 'archived' }).eq('id', id);
+  // Archiving and deleting both go through the database, which is what decides
+  // whether a child may be removed (any invoices/attendance => archive only).
+  const setChildState = useMutation({
+    mutationFn: async ({ id, mode }: { id: string; mode: 'archive' | 'restore' | 'delete' }) => {
+      if (mode === 'restore') {
+        const { error } = await supabase.rpc('admin_restore_child', { p_child: id });
+        if (error) throw error;
+        return;
+      }
+      const { error } = await supabase.rpc('admin_delete_child', {
+        p_child: id, p_hard: mode === 'delete',
+      });
       if (error) throw error;
     },
     onSuccess: () => {
       push('success', t('common.savedSuccessfully'));
       void qc.invalidateQueries({ queryKey: ['children'] });
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
     },
-    onError: (e: Error) => push('error', e.message),
+    onError: (e: Error) => push('error', humanizeError(e, isRtl ? 'ar' : 'en')),
   });
 
   const checkDuplicates = async () => {
@@ -201,9 +206,29 @@ export default function Children() {
                       <div className="flex justify-end gap-1">
                         <Link to={`/children/${c.id}`}><Button variant="ghost" size="sm">{t('common.view')}</Button></Link>
                         {can('children.archive') && c.status === 'active' && (
-                          <Button variant="ghost" size="sm" onClick={() => {
-                            if (window.confirm(t('common.confirmDelete'))) archiveChild.mutate(c.id);
+                          <Button variant="ghost" size="sm" title={isRtl ? 'أرشفة' : 'Archive'} onClick={() => {
+                            if (window.confirm(isRtl
+                              ? 'أرشفة الطفل؟ البيانات المالية والحضور تبقى محفوظة.'
+                              : 'Archive this child? Financial and attendance history is kept.')) {
+                              setChildState.mutate({ id: c.id, mode: 'archive' });
+                            }
                           }}><Archive className="h-3.5 w-3.5" /></Button>
+                        )}
+                        {can('children.archive') && c.status === 'archived' && (
+                          <Button variant="ghost" size="sm" title={isRtl ? 'استرجاع' : 'Restore'}
+                            onClick={() => setChildState.mutate({ id: c.id, mode: 'restore' })}>
+                            <RotateCcw className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        {can('children.archive') && context?.is_super_admin && c.status === 'archived' && (
+                          <Button variant="ghost" size="sm" title={isRtl ? 'حذف نهائي' : 'Delete permanently'}
+                            onClick={() => {
+                              if (window.confirm(isRtl
+                                ? 'حذف نهائي لا يمكن التراجع عنه. لو فيه فواتير أو حضور هيترفض.'
+                                : 'Permanent delete, cannot be undone. Refused if any history exists.')) {
+                                setChildState.mutate({ id: c.id, mode: 'delete' });
+                              }
+                            }}><Trash2 className="h-3.5 w-3.5" /></Button>
                         )}
                       </div>
                     </td>
