@@ -381,3 +381,57 @@ Not inferred from reading code — each was called and the result compared:
 `child_documents`, `medical_notes`, and file uploads (`uploaded_files`,
 storage buckets) have tables and RLS but no screen. Documents need a storage
 policy review that is out of scope for this pass; flagged rather than faked.
+
+## 5f. Remaining schema gaps closed
+
+A table-vs-screen audit after 0016 still found these reachable only by SQL. All
+are now in the app.
+
+| Area | Where it lives now |
+| --- | --- |
+| `purchases`, `purchase_items`, `inventory_movements` | `/purchases` |
+| `product_categories` | `/categories`, and products pick one via a real dropdown |
+| `child_documents`, `medical_notes`, private storage | `/documents` |
+| `employee_attendance` | `/attendance` |
+| `classroom_teachers` | Nursery → *Classroom teachers* |
+| `subscription_usage` | Subscriptions → usage ledger (clock icon) |
+
+`refunds` and `user_roles` need no separate screen: refunds are written by
+`refund_payment` and shown inline in `/invoices`, and roles are managed through
+the `admin_set_user_role` RPCs on `/staff` and `/roles`.
+
+### Currency literal found and removed (policy violation)
+`Nursery.tsx` defaulted the enrollment fee to `'2500'`. Anyone who did not edit
+that field created an enrollment at 2500 regardless of the classroom's actual
+`monthly_fee`. Fixed:
+- the field starts empty and is filled from the selected classroom,
+- saving is refused (`fee_required`) while it is empty — `Number('')` is 0 and
+  would otherwise have persisted a **free** enrollment,
+- `tests/pricing-policy.test.ts` now scans `src/` and fails if any money field is
+  defaulted to a numeric literal. Confirmed it fails on the old code.
+
+### Storage policy gap
+Staff could upload and read documents but not delete them — the storage policies
+covered SELECT and INSERT only, so a wrong upload was permanent. Added
+`storage_staff_delete` in 0016.
+
+### Verified live for this batch
+Created a category, a purchase order with a line item (database generated
+`line_total` 150), and the matching `inventory_movements` row; then deleted all
+three and confirmed the pre-existing demo data was untouched.
+
+## 5g. Honest remaining limitations
+
+- **No browser E2E.** Chromium cannot be downloaded in this sandbox, so the
+  screens are verified by typecheck, lint, unit tests and the build, plus direct
+  calls to every RPC and table they use. Nobody has clicked through the UI.
+- **The deployed preview is behind Vercel Authentication**, so it returns a login
+  redirect to any unauthenticated fetch. Turning that off is a dashboard setting
+  only the account owner can change.
+- **`RLS probe` is skipped in CI** because it needs live database credentials that
+  are intentionally not in the repo; it was run manually against
+  `wpprnexfdzteeqkmqhir` instead (all 49 public tables have RLS + a policy).
+- **Offline sync** is implemented and journaled in `sync_operations`, but real
+  multi-device conflict scenarios have not been exercised.
+- **Parent portal** is read-only by design and covers attendance, invoices,
+  reports and subscriptions. It does not let a guardian pay online.
