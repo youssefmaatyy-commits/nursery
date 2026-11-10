@@ -338,3 +338,46 @@ candidates longest-first — see `tests/errors.test.ts`.
   role; reset a password; activate/deactivate.
 - **`/roles`** — the permission matrix is now interactive. `super_admin` is shown
   as always-granted and is not editable (it short-circuits `has_permission`).
+
+## 5e. Atomic registration, calendar, self-service password (migration 0016)
+
+### Child registration was not atomic (real defect)
+`createChild()` did three sequential PostgREST inserts — parent, then child, then
+`child_guardians`. PostgREST calls are separate transactions, so if the third one
+failed the branch was left with an **orphan parent** and a **child with no
+guardian**, and that child could never be scheduled or checked out.
+
+`create_child_with_guardian(p_branch, p_child, p_parent_id, p_new_parent,
+p_relation)` replaces it with a single SECURITY DEFINER call: create or resolve
+the guardian, insert the child, link the guardian, write the audit row — or roll
+everything back.
+
+Verified live: creating a child without `date_of_birth` now raises
+`child_name_and_dob_required` and leaves **0** rows in `parents`; the old code
+left the parent behind.
+
+### Gaps found by walking the schema, now closed
+| Gap | Resolution |
+| --- | --- |
+| `holidays`, `events`, `activities` had no UI since migration 0003 | `/calendar` screen + `nursery_calendar(branch, from, to)` |
+| A normal user had **no way to change their own password** (`/change-password` was only reachable through the forced-change gate) | added to the user menu |
+
+### Write paths exercised against the live database
+Not inferred from reading code — each was called and the result compared:
+
+| Path | Result |
+| --- | --- |
+| `create_invoice` | `INV-001012`, total 50, balance 50 |
+| `record_payment` | invoice → `paid`, paid 50, balance 0 |
+| `refund_payment` | → `partially_paid`, paid 0, balance 50 (ledger reconciles) |
+| `create_invoice` replayed with the same idempotency key | returned the original invoice with `idempotent_replay: true` — no double charge |
+| `open_shift` / `close_shift` | shift closed, counted 50 vs expected 100, difference −50 |
+| `check_in_child` / `check_out_nursery` | nursery attendance created, then closed with a timestamp |
+| `create_subscription` | 800 EGP, ends 2027-02-07 |
+| `quote_kids_area` (90 min) | 80 billable minutes → 120 EGP, straight from the pricing rule |
+| RLS audit | all 49 public tables have RLS enabled and ≥1 policy |
+
+### Still genuinely absent
+`child_documents`, `medical_notes`, and file uploads (`uploaded_files`,
+storage buckets) have tables and RLS but no screen. Documents need a storage
+policy review that is out of scope for this pass; flagged rather than faked.
